@@ -1,0 +1,11 @@
+import { Router } from 'express';
+import { getCart, syncCart, clearCart } from '../controllers/cartController.js';
+import { authenticateUser } from '../middleware/auth.js';
+import { validateBody } from '../middleware/validate.js';
+import { cartSchema } from '../validations/schemas.js';
+const router = Router();
+router.use(authenticateUser);
+router.get('/', getCart);
+router.put('/', validateBody(cartSchema), syncCart);
+router.delete('/', clearCart);
+export default router;

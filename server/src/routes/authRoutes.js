@@ -1,0 +1,20 @@
+import { Router } from 'express';
+import { register, login, adminLogin, refresh, logout, me, updateProfile, changePassword, setupTwoFactor, enableTwoFactor, disableTwoFactor } from '../controllers/authController.js';
+import { authenticateUser } from '../middleware/auth.js';
+import { authLimiter, adminLoginLimiter } from '../middleware/rateLimiters.js';
+import { validateBody } from '../middleware/validate.js';
+import { registerSchema, loginSchema, adminLoginSchema, profileSchema, passwordSchema, twoFactorSchema } from '../validations/schemas.js';
+
+const router = Router();
+router.post('/register', authLimiter, validateBody(registerSchema), register);
+router.post('/login', authLimiter, validateBody(loginSchema), login);
+router.post('/admin/login', adminLoginLimiter, validateBody(adminLoginSchema), adminLogin);
+router.post('/refresh', authLimiter, refresh);
+router.post('/logout', logout);
+router.get('/me', authenticateUser, me);
+router.patch('/profile', authenticateUser, validateBody(profileSchema), updateProfile);
+router.patch('/password', authenticateUser, validateBody(passwordSchema), changePassword);
+router.post('/2fa/setup', authenticateUser, setupTwoFactor);
+router.post('/2fa/enable', authenticateUser, validateBody(twoFactorSchema), enableTwoFactor);
+router.post('/2fa/disable', authenticateUser, validateBody(twoFactorSchema), disableTwoFactor);
+export default router;
