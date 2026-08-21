@@ -9,6 +9,7 @@ const recentSchema = new mongoose.Schema({
 
 const userSchema = new mongoose.Schema({
   name: { type: String, trim: true, required: true, maxlength: 100 },
+  username: { type: String, trim: true, lowercase: true, sparse: true, unique: true, index: true },
   email: { type: String, trim: true, lowercase: true, required: true, unique: true, index: true },
   password: { type: String, required: true, minlength: 8, select: false },
   phone: { type: String, trim: true, default: '' },
@@ -44,7 +45,7 @@ userSchema.pre('save', async function hashPassword(next) {
 userSchema.methods.comparePassword = function comparePassword(value) { return bcrypt.compare(value, this.password); };
 userSchema.methods.toPublicJSON = function toPublicJSON() {
   return {
-    id: this._id, name: this.name, email: this.email, phone: this.phone, avatar: this.avatar, role: this.role,
+    id: this._id, name: this.name, username: this.username, email: this.email, phone: this.phone, avatar: this.avatar, role: this.role,
     permissions: this.permissions, isActive: this.isActive, createdAt: this.createdAt, lastLoginAt: this.lastLoginAt,
     walletBalance: this.walletBalance, loyaltyPoints: this.loyaltyPoints, referralCode: this.referralCode,
     referralStats: this.referralStats, twoFactorEnabled: this.twoFactorEnabled,

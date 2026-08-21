@@ -1,13 +1,14 @@
 import { Router } from 'express';
-import { register, login, adminLogin, refresh, logout, me, updateProfile, changePassword, setupTwoFactor, enableTwoFactor, disableTwoFactor } from '../controllers/authController.js';
+import { register, login, adminRegister, adminLogin, refresh, logout, me, updateProfile, changePassword, setupTwoFactor, enableTwoFactor, disableTwoFactor } from '../controllers/authController.js';
 import { authenticateUser } from '../middleware/auth.js';
 import { authLimiter, adminLoginLimiter } from '../middleware/rateLimiters.js';
 import { validateBody } from '../middleware/validate.js';
-import { registerSchema, loginSchema, adminLoginSchema, profileSchema, passwordSchema, twoFactorSchema } from '../validations/schemas.js';
+import { registerSchema, loginSchema, adminRegisterSchema, adminLoginSchema, profileSchema, passwordSchema, twoFactorSchema } from '../validations/schemas.js';
 
 const router = Router();
 router.post('/register', authLimiter, validateBody(registerSchema), register);
 router.post('/login', authLimiter, validateBody(loginSchema), login);
+router.post('/admin/register', authLimiter, validateBody(adminRegisterSchema), adminRegister);
 router.post('/admin/login', adminLoginLimiter, validateBody(adminLoginSchema), adminLogin);
 router.post('/refresh', authLimiter, refresh);
 router.post('/logout', logout);

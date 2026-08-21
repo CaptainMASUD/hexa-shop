@@ -47,8 +47,7 @@ import EmptyState from '../../components/EmptyState'
 /* ========================================================================== */
 
 export default function BundleDetailsPage() {
-  const { slug } =
-    useParams()
+  const { slug } = useParams()
 
   const [
     bundle,
@@ -211,7 +210,7 @@ export default function BundleDetailsPage() {
   }
 
   /* ====================================================================== */
-  /* Bundle Pricing                                                         */
+  /* Pricing                                                                */
   /* ====================================================================== */
 
   const regularPrice =
@@ -246,7 +245,8 @@ export default function BundleDetailsPage() {
     )
 
   const componentSavings =
-    componentRegularTotal > 0
+    componentRegularTotal >
+    0
       ? Math.max(
           0,
           componentRegularTotal -
@@ -477,7 +477,7 @@ export default function BundleDetailsPage() {
                 </div>
               )}
 
-              {/* Bottom Overlay */}
+              {/* Subtle image gradient */}
 
               {bundleImage && (
                 <div
@@ -488,59 +488,16 @@ export default function BundleDetailsPage() {
                     inset-0
 
                     bg-gradient-to-t
-                    from-black/40
+                    from-black/25
                     via-transparent
                     to-transparent
                   "
                 />
               )}
 
-              {/* Bundle Badge */}
-
-              <div
-                className="
-                  absolute
-                  left-4
-                  top-4
-                "
-              >
-                <span
-                  className="
-                    inline-flex
-                    items-center
-                    gap-1.5
-
-                    rounded-full
-
-                    border
-                    border-white/15
-
-                    bg-black/40
-
-                    px-3
-                    py-1.5
-
-                    text-[10px]
-                    font-semibold
-
-                    text-white
-
-                    backdrop-blur-md
-                  "
-                >
-                  <UIIcon
-                    icon={
-                      GiftIcon
-                    }
-                    size={13}
-                    strokeWidth={1.8}
-                  />
-
-                  HEXA Bundle
-                </span>
-              </div>
-
-              {/* Discount */}
+              {/* ========================================================= */}
+              {/* Discount Badge Only                                      */}
+              {/* ========================================================= */}
 
               {discountPercent >
                 0 && (
@@ -562,12 +519,15 @@ export default function BundleDetailsPage() {
 
                       text-[10px]
                       font-bold
-
                       text-white
+
+                      shadow-[0_5px_16px_rgba(0,0,0,0.15)]
                     "
                   >
-                    {discountPercent}%
-                    OFF
+                    {
+                      discountPercent
+                    }
+                    % OFF
                   </span>
                 </div>
               )}
@@ -588,7 +548,9 @@ export default function BundleDetailsPage() {
               lg:justify-center
             "
           >
-            {/* Bundle Badge */}
+            {/* ============================================================ */}
+            {/* Bundle Badge                                                 */}
+            {/* ============================================================ */}
 
             <div
               className="
@@ -624,7 +586,9 @@ export default function BundleDetailsPage() {
               HEXA Bundle
             </div>
 
-            {/* Name */}
+            {/* ============================================================ */}
+            {/* Name                                                         */}
+            {/* ============================================================ */}
 
             <h1
               className="
@@ -644,7 +608,9 @@ export default function BundleDetailsPage() {
               {bundle.name}
             </h1>
 
-            {/* Description */}
+            {/* ============================================================ */}
+            {/* Description                                                  */}
+            {/* ============================================================ */}
 
             {(bundle.description ||
               bundle.shortDescription) && (
@@ -665,7 +631,9 @@ export default function BundleDetailsPage() {
               </p>
             )}
 
-            {/* Bundle Meta */}
+            {/* ============================================================ */}
+            {/* Bundle Meta                                                  */}
+            {/* ============================================================ */}
 
             <div
               className="
@@ -751,7 +719,7 @@ export default function BundleDetailsPage() {
             </div>
 
             {/* ============================================================ */}
-            {/* Pricing Card                                                 */}
+            {/* Pricing                                                      */}
             {/* ============================================================ */}
 
             <div
@@ -850,12 +818,16 @@ export default function BundleDetailsPage() {
                     "
                   >
                     Save{' '}
-                    {discountPercent}%
+                    {
+                      discountPercent
+                    }
+                    %
                   </span>
                 )}
               </div>
 
-              {savings > 0 && (
+              {savings >
+                0 && (
                 <div
                   className="
                     mt-4
@@ -929,8 +901,6 @@ export default function BundleDetailsPage() {
                 sm:items-center
               "
             >
-              {/* Quantity */}
-
               <QuantityStepper
                 quantity={
                   quantity
@@ -942,8 +912,6 @@ export default function BundleDetailsPage() {
                   increaseQuantity
                 }
               />
-
-              {/* Add Bundle */}
 
               <button
                 type="button"
@@ -1029,8 +997,6 @@ export default function BundleDetailsPage() {
             sm:mt-14
           "
         >
-          {/* Heading */}
-
           <div
             className="
               max-w-2xl
@@ -1114,9 +1080,9 @@ export default function BundleDetailsPage() {
             </p>
           </div>
 
-          {/* ============================================================ */}
-          {/* Product Grid                                                */}
-          {/* ============================================================ */}
+          {/* ============================================================== */}
+          {/* Included Product Cards                                         */}
+          {/* ============================================================== */}
 
           <div
             className="
@@ -1129,7 +1095,8 @@ export default function BundleDetailsPage() {
             "
           >
             {(
-              bundle.items || []
+              bundle.items ||
+              []
             ).map(
               (item) => {
                 const product =
@@ -1226,6 +1193,7 @@ export default function BundleDetailsPage() {
 
                             transition-transform
                             duration-300
+                            ease-out
 
                             group-hover:scale-[1.025]
                           "
@@ -1255,7 +1223,7 @@ export default function BundleDetailsPage() {
                     </div>
 
                     {/* ================================================== */}
-                    {/* Info                                              */}
+                    {/* Information                                       */}
                     {/* ================================================== */}
 
                     <div
@@ -1305,11 +1273,11 @@ export default function BundleDetailsPage() {
                               ? `${variant.name} · `
                               : ''}
                             Quantity{' '}
-                            {item.quantity}
+                            {
+                              item.quantity
+                            }
                           </p>
                         </div>
-
-                        {/* Included */}
 
                         <span
                           className="
@@ -1339,8 +1307,6 @@ export default function BundleDetailsPage() {
                           />
                         </span>
                       </div>
-
-                      {/* Product Link */}
 
                       {product?.slug && (
                         <Link

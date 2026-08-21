@@ -42,33 +42,61 @@ export const login = asyncHandler(async (req, res) => {
   return sendAuth(req, res, user);
 });
 
-export const adminLogin = asyncHandler(async (req, res) => {
-  const configured = env.ADMIN_USERNAME && env.ADMIN_LOGIN_CODE;
-  const valid = configured && safeEqual(req.body.username, env.ADMIN_USERNAME) && safeEqual(req.body.adminCode, env.ADMIN_LOGIN_CODE);
-  if (!valid) {
-    await writeAudit(req, 'admin_login_failed', 'Auth', null, { usernameProvided: Boolean(req.body.username) });
-    throw new ApiError(401, 'Unable to sign in with those credentials');
+export const adminRegister = asyncHandler(async (req, res) => {
+  const secretCode = env.ADMIN_REGISTER_CODE || 'HEXA-ADMIN-SECRET-2026';
+  const isCodeValid = safeEqual(String(req.body.registerCode).trim(), secretCode);
+  if (!isCodeValid) {
+    await writeAudit(req, 'admin_register_failed_code', 'Auth', null, { username: req.body.username });
+    throw new ApiError(403, 'Invalid admin registration security code');
   }
 
-  let admin = await User.findOne({ isMasterAdmin: true });
-  if (!admin) {
-    admin = await User.findOne({ email: env.ADMIN_EMAIL });
-    if (admin) {
-      admin.role = 'admin';
-      admin.isMasterAdmin = true;
-      admin.isActive = true;
-      await admin.save({ validateBeforeSave: false });
-    } else {
-      admin = await User.create({
-        name: 'HEXA Administrator',
-        email: env.ADMIN_EMAIL,
-        password: `${crypto.randomBytes(32).toString('hex')}Aa1`,
-        role: 'admin',
-        isMasterAdmin: true,
-      });
-    }
+  const username = String(req.body.username).trim().toLowerCase();
+  const email = req.body.email ? String(req.body.email).trim().toLowerCase() : `${username}@hexa.local`;
+
+  const existing = await User.findOne({
+    $or: [
+      { username },
+      { email },
+    ],
+  });
+  if (existing) {
+    throw new ApiError(409, existing.username === username ? 'This admin username is already taken' : 'This email is already registered');
   }
-  if (!admin.isActive) throw new ApiError(401, 'Unable to sign in with those credentials');
+
+  const adminCount = await User.countDocuments({ role: 'admin' });
+
+  const admin = await User.create({
+    name: req.body.name || username,
+    username,
+    email,
+    password: req.body.password,
+    role: 'admin',
+    isMasterAdmin: adminCount === 0,
+    isActive: true,
+  });
+
+  await writeAudit(req, 'admin_registered', 'User', admin._id, { username });
+  return sendAuth(req, res, admin, 'Admin account registered successfully');
+});
+
+export const adminLogin = asyncHandler(async (req, res) => {
+  const identifier = String(req.body.username).trim().toLowerCase();
+  const password = String(req.body.password || '');
+
+  const admin = await User.findOne({
+    $or: [
+      { username: identifier },
+      { email: identifier },
+    ],
+    role: 'admin',
+  }).select('+password');
+
+  const valid = admin && admin.isActive && (await admin.comparePassword(password));
+  if (!valid) {
+    await writeAudit(req, 'admin_login_failed', 'Auth', admin?._id || null, { identifier });
+    throw new ApiError(401, 'Invalid admin username or password');
+  }
+
   admin.lastLoginAt = new Date();
   await admin.save({ validateBeforeSave: false });
   req.user = admin;

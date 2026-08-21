@@ -15,7 +15,17 @@ export const registerSchema = z.object({
   referralCode: z.string().trim().max(40).optional().default(''),
 });
 export const loginSchema = z.object({ email, password: z.string().min(1).max(128) });
-export const adminLoginSchema = z.object({ username: z.string().trim().min(2).max(100), adminCode: z.string().min(4).max(256), otp: z.string().regex(/^\d{6}$/).optional().or(z.literal('')) });
+export const adminRegisterSchema = z.object({
+  name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100),
+  username: z.string().trim().min(3, 'Username must be at least 3 characters').max(50).regex(/^[a-zA-Z0-9._-]+$/, 'Username can only contain letters, numbers, dots, dashes, and underscores').transform((v) => v.toLowerCase()),
+  email: email.optional(),
+  password: strongPassword,
+  registerCode: z.string().trim().min(1, 'Admin registration code is required'),
+});
+export const adminLoginSchema = z.object({
+  username: z.string().trim().min(2, 'Username is required').max(160),
+  password: z.string().min(1, 'Password is required').max(128),
+});
 export const twoFactorSchema = z.object({ otp: z.string().regex(/^\d{6}$/, 'Enter a 6-digit authenticator code') });
 export const profileSchema = z.object({ name: z.string().trim().min(2).max(100), phone: z.string().trim().max(30).optional().default('') });
 export const passwordSchema = z.object({ currentPassword: z.string().min(1).max(128), newPassword: strongPassword });

@@ -40,6 +40,27 @@ app.use(hpp());
 app.use(compression());
 app.use('/api', apiLimiter);
 
+app.get('/', (_req, res) => res.json({
+  success: true,
+  message: 'HEXA E-Commerce & Marketplace API Server is running',
+  version: '1.0.0',
+  data: {
+    status: 'healthy',
+    environment: env.NODE_ENV,
+    endpoints: {
+      health: '/api/health',
+      v1: '/api/v1',
+    },
+  },
+}));
+app.get('/api', (_req, res) => res.json({
+  success: true,
+  message: 'HEXA API Base',
+  data: {
+    version: 'v1',
+    status: 'online',
+  },
+}));
 app.get('/api/health', (_req, res) => res.json({ success: true, message: 'HEXA API is healthy', data: { environment: env.NODE_ENV } }));
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/categories', categoryRoutes);

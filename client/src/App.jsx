@@ -17,6 +17,7 @@ const OrderSuccessPage = lazy(() => import('./pages/public/OrderSuccessPage'))
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'))
 const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'))
 const AdminLoginPage = lazy(() => import('./pages/auth/AdminLoginPage'))
+const AdminRegisterPage = lazy(() => import('./pages/auth/AdminRegisterPage'))
 const AccountPage = lazy(() => import('./pages/account/AccountPage'))
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard'))
 const AdminProducts = lazy(() => import('./pages/admin/AdminProducts'))
@@ -58,7 +59,10 @@ export default function App() {
       <Route path="*" element={<NotFoundPage />} />
     </Route>
 
-    <Route element={<GuestRoute />}><Route path="/admin/login" element={<AdminLoginPage />} /></Route>
+    <Route element={<GuestRoute />}>
+      <Route path="/admin/login" element={<AdminLoginPage />} />
+      <Route path="/admin/register" element={<AdminRegisterPage />} />
+    </Route>
     <Route element={<AdminRoute />}>
       <Route path="/admin" element={<AdminLayout />}>
         <Route index element={<AdminDashboard />} />
