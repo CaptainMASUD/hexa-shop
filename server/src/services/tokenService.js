@@ -9,7 +9,7 @@ const refreshCookieName = 'hexa_refresh';
 const refreshCookieOptions = (expiresAt) => ({
   httpOnly: true,
   secure: isProduction,
-  sameSite: 'lax',
+  sameSite: isProduction ? 'none' : 'lax',
   path: '/api/v1/auth',
   expires: expiresAt,
 });
@@ -87,7 +87,7 @@ export const setRefreshCookie = (res, refreshToken, expiresAt) => {
 };
 
 export const clearRefreshCookie = (res) => {
-  res.clearCookie(refreshCookieName, { httpOnly: true, secure: isProduction, sameSite: 'lax', path: '/api/v1/auth' });
+  res.clearCookie(refreshCookieName, { httpOnly: true, secure: isProduction, sameSite: isProduction ? 'none' : 'lax', path: '/api/v1/auth' });
 };
 
 export const getRefreshCookie = (req) => req.cookies?.[refreshCookieName];

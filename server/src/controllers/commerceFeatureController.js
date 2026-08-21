@@ -47,7 +47,11 @@ export const promotions = asyncHandler(async (_req, res) => {
 });
 
 export const publicSettings = asyncHandler(async (_req, res) => {
-  const data = (await getSettings()).toObject();
+  const doc = await getSettings();
+  const data = doc ? (typeof doc.toObject === 'function' ? doc.toObject() : { ...doc }) : {
+    currencies: [{ code: 'BDT', symbol: '৳', rateFromBDT: 1, active: true }, { code: 'USD', symbol: '$', rateFromBDT: 0.0082, active: true }],
+    faq: [],
+  };
   if (data.webhooks) delete data.webhooks;
   return success(res, { data });
 });

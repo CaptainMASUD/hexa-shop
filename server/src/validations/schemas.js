@@ -18,8 +18,8 @@ export const loginSchema = z.object({ email, password: z.string().min(1).max(128
 export const adminRegisterSchema = z.object({
   name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100),
   username: z.string().trim().min(3, 'Username must be at least 3 characters').max(50).regex(/^[a-zA-Z0-9._-]+$/, 'Username can only contain letters, numbers, dots, dashes, and underscores').transform((v) => v.toLowerCase()),
-  email: email.optional(),
-  password: strongPassword,
+  email: z.string().trim().email().max(160).transform((v) => v.toLowerCase()).optional().or(z.literal('')).default(''),
+  password: z.string().min(8, 'Password must be at least 8 characters').max(128),
   registerCode: z.string().trim().min(1, 'Admin registration code is required'),
 });
 export const adminLoginSchema = z.object({

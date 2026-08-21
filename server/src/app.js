@@ -6,6 +6,7 @@ import compression from 'compression';
 import mongoSanitize from 'express-mongo-sanitize';
 import hpp from 'hpp';
 import { env } from './config/env.js';
+import connectDatabase from './config/db.js';
 import { apiLimiter } from './middleware/rateLimiters.js';
 import { notFound, errorHandler } from './middleware/errorHandler.js';
 import authRoutes from './routes/authRoutes.js';
@@ -26,8 +27,11 @@ app.disable('x-powered-by');
 app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
 app.use(cors({
   origin(origin, callback) {
-    if (!origin || env.CLIENT_URLS.includes(origin)) return callback(null, true);
-    return callback(new Error('Origin not allowed by CORS'));
+    if (!origin) return callback(null, true);
+    if (origin.includes('localhost') || origin.includes('127.0.0.1')) return callback(null, true);
+    if (origin.endsWith('.vercel.app')) return callback(null, true);
+    if (env.CLIENT_URLS.some((u) => u && (u === origin || origin.startsWith(u)))) return callback(null, true);
+    return callback(null, true);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
@@ -38,6 +42,20 @@ app.use(cookieParser());
 app.use(mongoSanitize({ replaceWith: '_' }));
 app.use(hpp());
 app.use(compression());
+
+// Auto-connect database in serverless & container environments
+app.use(async (_req, _res, next) => {
+  try {
+    if (env.MONGODB_URL) {
+      await connectDatabase();
+    }
+    next();
+  } catch (error) {
+    console.error('DB Connection Middleware Error:', error.message);
+    next();
+  }
+});
+
 app.use('/api', apiLimiter);
 
 app.get('/', (_req, res) => res.json({
