@@ -13,6 +13,7 @@ import Coupon from '../models/Coupon.js';
 import CouponUsage from '../models/CouponUsage.js';
 import CouponUserUsage from '../models/CouponUserUsage.js';
 import { autoDeliverEligibleItems } from '../services/autoDeliveryService.js';
+import { autoFulfillEligibleItems } from '../services/fulfillmentService.js';
 import { createSubscriptionsForOrder } from '../services/subscriptionService.js';
 import { awardDeliveredOrder } from '../services/rewardService.js';
 import { notifyUser, notifyAdmins } from '../services/notificationService.js';
@@ -154,13 +155,22 @@ export const myOrder = asyncHandler(async (req, res) => success(res, { data: awa
 
 export const adminOrders = asyncHandler(async (req, res) => {
   const page = Math.max(1, Number(req.query.page || 1));
-  const limit = Math.min(100, Math.max(1, Number(req.query.limit || 20)));
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit || 80)));
   const filter = {};
-  if (req.query.status) filter.status = req.query.status;
-  if (req.query.paymentStatus) filter['payment.status'] = req.query.paymentStatus;
-  if (req.query.q) {
-    const regex = new RegExp(req.query.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
-    filter.$or = [{ orderNumber: regex }, { 'customer.email': regex }, { 'payment.transactionId': regex }];
+  if (req.query.status && req.query.status.trim()) filter.status = req.query.status.trim();
+  if (req.query.paymentStatus && req.query.paymentStatus.trim()) filter['payment.status'] = req.query.paymentStatus.trim();
+  if (req.query.q && req.query.q.trim()) {
+    const regex = new RegExp(req.query.q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    filter.$or = [
+      { orderNumber: regex },
+      { 'customer.email': regex },
+      { 'customer.name': regex },
+      { 'customer.phone': regex },
+      { 'payment.transactionId': regex },
+      { 'payment.senderNumber': regex },
+      { 'payment.methodName': regex },
+      { 'items.productName': regex },
+    ];
   }
   const [orders, total] = await Promise.all([
     Order.find(filter).populate('user', 'name email phone').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
@@ -221,6 +231,7 @@ export const updatePaymentStatus = asyncHandler(async (req, res) => {
     await releaseInventory(expandOrderItemsForInventory(order.items), req.user._id, order._id, `Payment ${status}`); order.inventoryState = 'released'; order.inventoryReleased = true; await restoreOrderBenefits(order);
   }
   if (status === 'verified') {
+    await autoFulfillEligibleItems(order, req.user._id);
     await autoDeliverEligibleItems(order, req.user._id);
     await createSubscriptionsForOrder(order).catch(() => {});
     const deliveredIds = new Set((order.deliveries || []).map((d) => String(d.orderItemId)));
@@ -329,6 +340,11 @@ export const deliverOrderItem = asyncHandler(async (req, res) => {
       order.deliveries[existingDeliveryIndex].deliveredAt = new Date();
       order.deliveries[existingDeliveryIndex].deliveredBy = req.user._id;
       order.timeline.push({ event: 'Credentials Updated', status: order.status, note: `Updated delivery credentials for ${item.productName}`, actor: req.user._id });
+      
+      const deliveredIds = new Set((order.deliveries || []).map((entry) => String(entry.orderItemId)));
+      if (req.body.markDelivered || (order.status !== 'delivered' && order.items.every((entry) => deliveredIds.has(String(entry._id))))) {
+        await completeDeliveredOrder(order, req.user._id);
+      }
       await order.save();
       await createSubscriptionsForOrder(order).catch(() => {});
       await writeAudit(req, 'credentials_updated', 'Order', order._id, { orderNumber: order.orderNumber, orderItemId: item._id });
@@ -341,6 +357,7 @@ export const deliverOrderItem = asyncHandler(async (req, res) => {
       summary: req.body.summary || 'Digital delivery',
       encryptedPayload: encryptJson(details),
       deliveredBy: req.user._id,
+      deliveredAt: new Date(),
     };
     const updated = await Order.findOneAndUpdate(
       { _id: order._id, 'payment.status': 'verified', deliveries: { $not: { $elemMatch: { orderItemId: item._id } } } },
@@ -352,7 +369,7 @@ export const deliverOrderItem = asyncHandler(async (req, res) => {
     await createSubscriptionsForOrder(updated).catch(() => {});
 
     const deliveredIds = new Set((updated.deliveries || []).map((entry) => String(entry.orderItemId)));
-    if (updated.items.every((entry) => deliveredIds.has(String(entry._id)))) {
+    if (req.body.markDelivered || updated.items.every((entry) => deliveredIds.has(String(entry._id)))) {
       await completeDeliveredOrder(updated, req.user._id);
       await updated.save();
     }

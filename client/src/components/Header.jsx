@@ -2169,7 +2169,7 @@ function NotificationDropdown({
                 text-[var(--hexa-muted)]
               "
             >
-              You're all caught up.
+              You&apos;re all caught up.
             </p>
           </div>
         )}

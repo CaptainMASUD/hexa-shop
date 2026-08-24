@@ -5,11 +5,25 @@ const componentSnapshotSchema = new mongoose.Schema({
   productName: { type: String, required: true },
   productSlug: { type: String, required: true },
   productImage: { type: String, default: '' },
+  brand: { type: String, default: '' },
   variantId: { type: mongoose.Schema.Types.ObjectId, default: null },
   variantName: { type: String, default: '' },
+  variantSku: { type: String, default: '' },
+  variantRegion: { type: String, default: '' },
+  variantPlatform: { type: String, default: '' },
+  variantDuration: { type: String, default: '' },
   unitPrice: { type: Number, required: true, min: 0 },
+  costPrice: { type: Number, default: 0, min: 0 },
   quantityPerBundle: { type: Number, required: true, min: 1 },
   productType: { type: String, required: true },
+  fulfillmentType: { type: String, default: 'manual' },
+}, { _id: false });
+
+const dynamicFieldSnapshotSchema = new mongoose.Schema({
+  key: { type: String, required: true },
+  label: { type: String, required: true },
+  type: { type: String, default: 'text' },
+  value: { type: mongoose.Schema.Types.Mixed, default: '' },
 }, { _id: false });
 
 const orderItemSchema = new mongoose.Schema({
@@ -19,13 +33,21 @@ const orderItemSchema = new mongoose.Schema({
   productName: { type: String, required: true },
   productSlug: { type: String, required: true },
   productImage: { type: String, default: '' },
+  brand: { type: String, default: '' },
   variantId: { type: mongoose.Schema.Types.ObjectId, default: null },
   variantName: { type: String, default: '' },
+  variantSku: { type: String, default: '' },
+  variantRegion: { type: String, default: '' },
+  variantPlatform: { type: String, default: '' },
+  variantDuration: { type: String, default: '' },
   price: { type: Number, required: true, min: 0 },
+  costPrice: { type: Number, default: 0, min: 0 },
   quantity: { type: Number, required: true, min: 1 },
   productType: { type: String, required: true },
+  fulfillmentType: { type: String, default: 'manual' },
   bundleSavings: { type: Number, default: 0, min: 0 },
   customerInputs: { type: mongoose.Schema.Types.Mixed, default: {} },
+  dynamicFieldSnapshots: { type: [dynamicFieldSnapshotSchema], default: [] },
   components: { type: [componentSnapshotSchema], default: [] },
 }, { _id: true });
 

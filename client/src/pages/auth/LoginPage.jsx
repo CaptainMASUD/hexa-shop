@@ -337,7 +337,7 @@ export default function LoginPage() {
             text-[var(--hexa-muted)]
           "
         >
-          Don't have an account?{' '}
+          Don&apos;t have an account?{' '}
           <Link
             to="/register"
             className="

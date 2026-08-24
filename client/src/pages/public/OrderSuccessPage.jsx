@@ -44,6 +44,7 @@ export default function OrderSuccessPage() {
         })
         .finally(() => setLoading(false))
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id])
 
   const printReceipt = () => {
@@ -198,7 +199,7 @@ export default function OrderSuccessPage() {
                       </p>
                       {item.customerInputs && Object.keys(item.customerInputs).length > 0 && (
                         <div className="mt-1.5 flex flex-wrap gap-1">
-                          {Object.entries(item.customerInputs).filter(([_, v]) => v).map(([k, v]) => (
+                          {Object.entries(item.customerInputs).filter(([, v]) => v).map(([k, v]) => (
                             <span key={k} className="rounded bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-purple-400">
                               <span className="capitalize text-[var(--hexa-muted)]">{k.replace(/([A-Z])/g, ' $1')}:</span> {String(v)}
                             </span>

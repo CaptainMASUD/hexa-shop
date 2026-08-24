@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
+import { HugeiconsIcon } from '@hugeicons/react'
 import {
-  FaBoxesStacked,
-  FaKey,
-  FaLock,
-  FaPlus,
-  FaShieldHalved,
-  FaUser,
-  FaWarehouse,
-} from 'react-icons/fa6'
+  Key01Icon,
+  PackageIcon,
+  PlusSignIcon,
+  Shield01Icon,
+  Store01Icon,
+  UserCircleIcon,
+} from '@hugeicons/core-free-icons'
 import { adminGet, adminPost } from '../../api/admin.api'
 import { apiErrorMessage } from '../../api/client'
 import { useToast } from '../../contexts/ToastContext'
@@ -36,14 +36,26 @@ const initialCredentialForm = {
   customText: '',
 }
 
+const initialBulkForm = {
+  productId: '',
+  variantId: '',
+  itemType: 'license_key',
+  previewPrefix: '',
+  rawLines: '',
+  expiresAt: '',
+  instructions: '',
+}
+
 export default function AdminInventory() {
   const [products, setProducts] = useState([])
   const [items, setItems] = useState([])
   const [history, setHistory] = useState([])
   const [stockOpen, setStockOpen] = useState(false)
   const [credOpen, setCredOpen] = useState(false)
+  const [bulkOpen, setBulkOpen] = useState(false)
   const [stockForm, setStockForm] = useState(initialStockForm)
   const [cred, setCred] = useState(initialCredentialForm)
+  const [bulkForm, setBulkForm] = useState(initialBulkForm)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const { notify } = useToast()
@@ -78,6 +90,10 @@ export default function AdminInventory() {
     () => products.find((product) => product._id === cred.productId),
     [products, cred.productId],
   )
+  const bulkProduct = useMemo(
+    () => products.find((product) => product._id === bulkForm.productId),
+    [products, bulkForm.productId],
+  )
 
   const availableCredentials = useMemo(
     () => items.filter((item) => item.status === 'available').length,
@@ -88,6 +104,44 @@ export default function AdminInventory() {
     () => items.filter((item) => item.status === 'reserved').length,
     [items],
   )
+
+  const saveBulk = async (event) => {
+    event.preventDefault()
+    if (!bulkForm.productId) {
+      notify('Please choose a product', 'error')
+      return
+    }
+    const lines = bulkForm.rawLines
+      .split('\n')
+      .map((l) => l.trim())
+      .filter(Boolean)
+
+    if (!lines.length) {
+      notify('Please enter at least one license key or credential line', 'error')
+      return
+    }
+
+    setSaving(true)
+    try {
+      const res = await adminPost('/inventory/items/bulk', {
+        productId: bulkForm.productId,
+        variantId: bulkForm.variantId || null,
+        itemType: bulkForm.itemType || 'license_key',
+        lines,
+        previewPrefix: bulkForm.previewPrefix.trim(),
+        expiresAt: bulkForm.expiresAt ? new Date(bulkForm.expiresAt).toISOString() : null,
+        instructions: bulkForm.instructions.trim(),
+      })
+      notify(res.message || `Successfully imported ${lines.length} digital inventory items`)
+      setBulkOpen(false)
+      setBulkForm(initialBulkForm)
+      await load()
+    } catch (error) {
+      notify(apiErrorMessage(error), 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const adjust = async (event) => {
     event.preventDefault()
@@ -174,25 +228,28 @@ export default function AdminInventory() {
         action={(
           <div className="flex flex-wrap gap-2">
             <button onClick={() => setStockOpen(true)} className="hexa-btn-secondary">
-              <FaWarehouse /> Adjust stock
+              <HugeiconsIcon icon={Store01Icon} size={15} /> Adjust stock
+            </button>
+            <button onClick={() => setBulkOpen(true)} className="hexa-btn-secondary text-purple-400">
+              <HugeiconsIcon icon={PackageIcon} size={15} /> Bulk Import Keys
             </button>
             <button onClick={() => setCredOpen(true)} className="hexa-btn">
-              <FaKey /> Add credential
+              <HugeiconsIcon icon={Key01Icon} size={15} /> Add credential
             </button>
           </div>
         )}
       />
 
       <section className="mb-6 grid gap-4 md:grid-cols-3">
-        <InventoryStat icon={FaBoxesStacked} label="Protected credentials" value={items.length} />
-        <InventoryStat icon={FaKey} label="Available" value={availableCredentials} />
-        <InventoryStat icon={FaWarehouse} label="Reserved" value={reservedCredentials} />
+        <InventoryStat icon={PackageIcon} label="Protected credentials" value={items.length} />
+        <InventoryStat icon={Key01Icon} label="Available" value={availableCredentials} />
+        <InventoryStat icon={Store01Icon} label="Reserved" value={reservedCredentials} />
       </section>
 
       <section className="mb-6 rounded-2xl border border-[var(--hexa-border)] bg-[var(--hexa-accent-soft)] p-5">
         <div className="flex gap-3">
           <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--hexa-accent)] text-white">
-            <FaBoxesStacked />
+            <HugeiconsIcon icon={PackageIcon} size={18} />
           </span>
           <div>
             <h2 className="font-semibold text-[var(--hexa-text)]">Bundle inventory rule</h2>
@@ -315,7 +372,7 @@ export default function AdminInventory() {
             />
           </label>
           <button disabled={saving} className="hexa-btn disabled:cursor-not-allowed disabled:opacity-60">
-            <FaPlus /> {saving ? 'Saving…' : 'Apply adjustment'}
+            <HugeiconsIcon icon={PlusSignIcon} size={15} /> {saving ? 'Saving…' : 'Apply adjustment'}
           </button>
         </form>
       </Modal>
@@ -341,9 +398,9 @@ export default function AdminInventory() {
             <span className="hexa-label mb-2 block">Credential Format</span>
             <div className="grid grid-cols-3 gap-2">
               {[
-                { id: 'account', label: 'Account Login', icon: FaUser },
-                { id: 'license', label: 'License / Key', icon: FaKey },
-                { id: 'custom', label: 'Custom Info', icon: FaShieldHalved },
+                { id: 'account', label: 'Account Login', icon: UserCircleIcon },
+                { id: 'license', label: 'License / Key', icon: Key01Icon },
+                { id: 'custom', label: 'Custom Info', icon: Shield01Icon },
               ].map((tab) => {
                 const Icon = tab.icon
                 return (
@@ -357,7 +414,7 @@ export default function AdminInventory() {
                         : 'border-[var(--hexa-border)] bg-[var(--hexa-card)] text-[var(--hexa-muted)] hover:text-[var(--hexa-text)]'
                     }`}
                   >
-                    <Icon className="text-xs shrink-0" />
+                    <HugeiconsIcon icon={Icon} size={14} className="shrink-0" />
                     <span>{tab.label}</span>
                   </button>
                 )
@@ -367,111 +424,207 @@ export default function AdminInventory() {
 
           {/* Form Fields based on Type */}
           {cred.credType === 'account' && (
-            <div className="space-y-3 rounded-2xl border border-[var(--hexa-border)] bg-[var(--hexa-card)]/50 p-4">
-              <label className="block">
-                <span className="hexa-label">Email or Username *</span>
-                <input
-                  required
-                  className="hexa-input"
-                  value={cred.email}
-                  onChange={(e) => setCred({ ...cred, email: e.target.value })}
-                  placeholder="e.g. premium.user@example.com"
-                />
-              </label>
-
-              <label className="block">
-                <span className="hexa-label">Password *</span>
-                <input
-                  required
-                  className="hexa-input"
-                  value={cred.password}
-                  onChange={(e) => setCred({ ...cred, password: e.target.value })}
-                  placeholder="e.g. SecretPassword#123"
-                />
-              </label>
-
-              <label className="block">
-                <span className="hexa-label">Profile PIN / Screen Number (Optional)</span>
-                <input
-                  className="hexa-input"
-                  value={cred.pin}
-                  onChange={(e) => setCred({ ...cred, pin: e.target.value })}
-                  placeholder="e.g. Profile 3 · PIN 1234"
-                />
-              </label>
+            <div className="space-y-3 rounded-2xl border border-[var(--hexa-border)] bg-[var(--hexa-card)]/60 p-4">
+              <span className="text-xs font-bold text-[var(--hexa-text)]">Account Login Information</span>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="hexa-label">Email or Username *</span>
+                  <input
+                    required
+                    className="hexa-input text-xs"
+                    placeholder="e.g. customer@example.com"
+                    value={cred.email}
+                    onChange={(e) => setCred({ ...cred, email: e.target.value })}
+                  />
+                </label>
+                <label className="block">
+                  <span className="hexa-label">Password *</span>
+                  <input
+                    required
+                    className="hexa-input text-xs"
+                    placeholder="e.g. SecretPassword123"
+                    value={cred.password}
+                    onChange={(e) => setCred({ ...cred, password: e.target.value })}
+                  />
+                </label>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <label className="block">
+                  <span className="hexa-label">Profile PIN / Screen (Optional)</span>
+                  <input
+                    className="hexa-input text-xs"
+                    placeholder="e.g. PIN: 1234, Screen: 2"
+                    value={cred.pin}
+                    onChange={(e) => setCred({ ...cred, pin: e.target.value })}
+                  />
+                </label>
+                <label className="block">
+                  <span className="hexa-label">Login or Service URL (Optional)</span>
+                  <input
+                    className="hexa-input text-xs"
+                    placeholder="e.g. https://netflix.com/login"
+                    value={cred.url}
+                    onChange={(e) => setCred({ ...cred, url: e.target.value })}
+                  />
+                </label>
+              </div>
             </div>
           )}
 
           {cred.credType === 'license' && (
-            <div className="space-y-3 rounded-2xl border border-[var(--hexa-border)] bg-[var(--hexa-card)]/50 p-4">
+            <div className="space-y-3 rounded-2xl border border-[var(--hexa-border)] bg-[var(--hexa-card)]/60 p-4">
+              <span className="text-xs font-bold text-[var(--hexa-text)]">License / Activation Key</span>
               <label className="block">
                 <span className="hexa-label">License Key / Serial Code *</span>
                 <input
                   required
-                  className="hexa-input font-mono"
-                  value={cred.licenseKey}
-                  onChange={(e) => setCred({ ...cred, licenseKey: e.target.value })}
-                  placeholder="e.g. XXXX-YYYY-ZZZZ-AAAA"
+                  className="hexa-input font-mono text-xs tracking-wider"
+                  placeholder="e.g. W269N-WFGWX-YVC9B-4J6C9-T83GX"
+                  value={cred.key}
+                  onChange={(e) => setCred({ ...cred, key: e.target.value })}
+                />
+              </label>
+              <label className="block">
+                <span className="hexa-label">Redemption or Download URL (Optional)</span>
+                <input
+                  className="hexa-input text-xs"
+                  placeholder="e.g. https://setup.office.com"
+                  value={cred.url}
+                  onChange={(e) => setCred({ ...cred, url: e.target.value })}
                 />
               </label>
             </div>
           )}
 
           {cred.credType === 'custom' && (
-            <div className="space-y-3 rounded-2xl border border-[var(--hexa-border)] bg-[var(--hexa-card)]/50 p-4">
+            <div className="space-y-3 rounded-2xl border border-[var(--hexa-border)] bg-[var(--hexa-card)]/60 p-4">
+              <span className="text-xs font-bold text-[var(--hexa-text)]">Custom Secret or Access Details</span>
               <label className="block">
-                <span className="hexa-label">Delivery Content / Instructions *</span>
+                <span className="hexa-label">Custom Payload / Text *</span>
                 <textarea
                   required
-                  rows={4}
-                  className="hexa-input"
-                  value={cred.customText}
-                  onChange={(e) => setCred({ ...cred, customText: e.target.value })}
-                  placeholder="Enter login URL, redeem voucher code, or access steps..."
+                  rows={3}
+                  className="hexa-input text-xs"
+                  placeholder="Enter custom access details, voucher codes, or redeem instructions"
+                  value={cred.custom}
+                  onChange={(e) => setCred({ ...cred, custom: e.target.value })}
                 />
               </label>
             </div>
           )}
 
-          <label className="block">
-            <span className="hexa-label">Delivery Instructions / Customer Note (Optional)</span>
-            <textarea
-              rows={2}
-              className="hexa-input text-xs"
-              value={cred.instructions}
-              onChange={(e) => setCred({ ...cred, instructions: e.target.value })}
-              placeholder="e.g. Do not change account email or password. Valid for 30 days."
-            />
-          </label>
-
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <label className="block">
-              <span className="hexa-label">Admin Label (Optional)</span>
+              <span className="hexa-label">Preview Label (Admin Reference)</span>
               <input
-                className="hexa-input"
+                className="hexa-input text-xs"
+                placeholder="e.g. US 1-Screen / Steam Key"
                 value={cred.previewLabel}
-                onChange={(event) => setCred({ ...cred, previewLabel: event.target.value })}
-                placeholder="e.g. Netflix Slot #12"
+                onChange={(e) => setCred({ ...cred, previewLabel: e.target.value })}
               />
             </label>
-
             <label className="block">
               <span className="hexa-label">Expiration Date (Optional)</span>
               <input
-                type="datetime-local"
-                className="hexa-input"
+                type="date"
+                className="hexa-input text-xs"
                 value={cred.expiresAt}
-                onChange={(event) => setCred({ ...cred, expiresAt: event.target.value })}
+                onChange={(e) => setCred({ ...cred, expiresAt: e.target.value })}
               />
             </label>
           </div>
+
+          <label className="block">
+            <span className="hexa-label">Delivery Instructions for Customer (Optional)</span>
+            <input
+              className="hexa-input text-xs"
+              placeholder="e.g. Do not change password or profile name"
+              value={cred.notes}
+              onChange={(e) => setCred({ ...cred, notes: e.target.value })}
+            />
+          </label>
 
           <p className="text-[11px] text-[var(--hexa-muted)]">
             🔒 All account details and keys are automatically encrypted with AES-256 before saving to the database.
           </p>
 
           <button disabled={saving} className="hexa-btn w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
-            <FaKey /> {saving ? 'Encrypting & Saving…' : 'Encrypt & Save to Vault'}
+            <HugeiconsIcon icon={Key01Icon} size={15} /> {saving ? 'Encrypting & Saving…' : 'Encrypt & Save to Vault'}
+          </button>
+        </form>
+      </Modal>
+
+      {/* Bulk Key Import Modal */}
+      <Modal open={bulkOpen} onClose={() => setBulkOpen(false)} title="Bulk Import License Keys & Accounts" maxWidth="max-w-2xl">
+        <form onSubmit={saveBulk} className="space-y-4">
+          <ProductSelect products={products} value={bulkForm.productId} onChange={(value) => setBulkForm({ ...bulkForm, productId: value, variantId: '' })} />
+
+          {bulkProduct && bulkProduct.variants?.length > 0 && (
+            <VariantSelect product={bulkProduct} value={bulkForm.variantId} onChange={(value) => setBulkForm({ ...bulkForm, variantId: value })} />
+          )}
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label className="block">
+              <span className="hexa-label">Item Type</span>
+              <select
+                className="hexa-input"
+                value={bulkForm.itemType}
+                onChange={(e) => setBulkForm({ ...bulkForm, itemType: e.target.value })}
+              >
+                <option value="license_key">License Keys / Activation Codes</option>
+                <option value="account_credentials">Account Logins (email:password)</option>
+                <option value="custom">Custom Text / Codes</option>
+              </select>
+            </label>
+
+            <label className="block">
+              <span className="hexa-label">Preview Label Prefix (Optional)</span>
+              <input
+                className="hexa-input"
+                value={bulkForm.previewPrefix}
+                onChange={(e) => setBulkForm({ ...bulkForm, previewPrefix: e.target.value })}
+                placeholder="e.g. Steam Key or Netflix Profile"
+              />
+            </label>
+          </div>
+
+          <label className="block">
+            <span className="hexa-label">
+              Paste Inventory Lines (1 per line) *
+              <span className="ml-2 font-normal text-purple-400">
+                ({bulkForm.rawLines.split('\n').filter((l) => l.trim()).length} detected)
+              </span>
+            </span>
+            <textarea
+              required
+              rows={8}
+              className="hexa-input font-mono text-xs leading-relaxed"
+              value={bulkForm.rawLines}
+              onChange={(e) => setBulkForm({ ...bulkForm, rawLines: e.target.value })}
+              placeholder={
+                bulkForm.itemType === 'license_key'
+                  ? 'XXXXX-XXXXX-XXXXX-XXXXX\nYYYYY-YYYYY-YYYYY-YYYYY\nZZZZZ-ZZZZZ-ZZZZZ-ZZZZZ'
+                  : 'user1@example.com:Password123\nuser2@example.com:Password456'
+              }
+            />
+          </label>
+
+          <label className="block">
+            <span className="hexa-label">Delivery Instructions for Customer (Optional)</span>
+            <input
+              className="hexa-input text-xs"
+              value={bulkForm.instructions}
+              onChange={(e) => setBulkForm({ ...bulkForm, instructions: e.target.value })}
+              placeholder="e.g. Redeem at https://store.steampowered.com/account/registerkey"
+            />
+          </label>
+
+          <p className="text-[11px] text-[var(--hexa-muted)]">
+            🔒 Each line will be individually encrypted with AES-256 and stored as an available unit in the inventory vault.
+          </p>
+
+          <button disabled={saving} className="hexa-btn w-full justify-center disabled:cursor-not-allowed disabled:opacity-60">
+            <HugeiconsIcon icon={PackageIcon} size={15} /> {saving ? 'Encrypting & Importing Batch…' : 'Encrypt & Import Batch to Vault'}
           </button>
         </form>
       </Modal>
@@ -483,7 +636,7 @@ function InventoryStat({ icon: Icon, label, value }) {
   return (
     <div className="hexa-card flex items-center gap-4 p-5">
       <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-[var(--hexa-accent-soft)] text-[var(--hexa-accent)]">
-        <Icon />
+        <HugeiconsIcon icon={Icon} size={20} />
       </span>
       <div>
         <p className="text-xs font-semibold uppercase tracking-wider text-[var(--hexa-muted)]">{label}</p>
@@ -503,7 +656,7 @@ function ProductSelect({ products, value, onChange }) {
           <option key={product._id} value={product._id}>{product.name}</option>
         ))}
       </select>
-      <p className="mt-1 text-xs text-[var(--hexa-muted)]">Bundle stock is intentionally not selectable here. Update the bundle's component products instead.</p>
+      <p className="mt-1 text-xs text-[var(--hexa-muted)]">Bundle stock is intentionally not selectable here. Update the bundle&apos;s component products instead.</p>
     </label>
   )
 }

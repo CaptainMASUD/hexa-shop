@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { BsHexagonFill } from 'react-icons/bs'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   ArrowRight01Icon,
+  HexagonIcon,
   Key01Icon,
   LockPasswordIcon,
   UserCircleIcon,
@@ -59,10 +59,10 @@ export default function AdminRegisterPage() {
         password: form.password,
         registerCode: form.registerCode.trim(),
       })
-      notify('Admin account registered successfully')
+      notify('Admin account created successfully')
       navigate('/admin')
     } catch (error) {
-      notify(apiErrorMessage(error, 'Unable to register admin account'), 'error')
+      notify(apiErrorMessage(error, 'Failed to register admin account'), 'error')
     } finally {
       setBusy(false)
     }
@@ -70,11 +70,11 @@ export default function AdminRegisterPage() {
 
   return (
     <div className="hexa-shell flex min-h-screen items-center justify-center px-4 py-12">
-      <div className="w-full max-w-[420px]">
+      <div className="w-full max-w-[440px]">
         {/* Header */}
         <div className="text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-purple-500/20 bg-purple-500/10 text-purple-500 shadow-lg shadow-purple-500/10">
-            <BsHexagonFill className="text-3xl text-purple-600" />
+            <HugeiconsIcon icon={HexagonIcon} size={28} className="text-purple-600" />
           </div>
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-[var(--hexa-text)]">
             Admin Registration

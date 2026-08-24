@@ -323,7 +323,10 @@ function HeroSection({
       src={banner?.image?.url || fallbackHero}
       alt={banner?.title || 'HEXA digital marketplace'}
       className="h-full w-full object-cover object-center"
-      fetchPriority="high"
+      loading="eager"
+      decoding="async"
+      // eslint-disable-next-line react/no-unknown-property
+      fetchpriority="high"
      />
 
      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(5,5,8,.96)_0%,rgba(5,5,8,.82)_42%,rgba(5,5,8,.30)_72%,rgba(5,5,8,.16)_100%)]" />

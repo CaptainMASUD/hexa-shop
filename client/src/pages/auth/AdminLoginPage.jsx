@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { BsHexagonFill } from 'react-icons/bs'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
   ArrowRight01Icon,
+  HexagonIcon,
   LockPasswordIcon,
   UserShield01Icon,
   ViewIcon,
@@ -55,7 +55,7 @@ export default function AdminLoginPage() {
         {/* Header */}
         <div className="text-center">
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-purple-500/20 bg-purple-500/10 text-purple-500 shadow-lg shadow-purple-500/10">
-            <BsHexagonFill className="text-3xl text-purple-600" />
+            <HugeiconsIcon icon={HexagonIcon} size={28} className="text-purple-600" />
           </div>
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-[var(--hexa-text)]">
             HEXA Admin Portal

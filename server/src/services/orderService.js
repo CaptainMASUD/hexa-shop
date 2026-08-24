@@ -17,6 +17,7 @@ import {
   effectivePrice,
   inventoryItemKey,
 } from '../utils/commerce.js';
+import { validateDynamicCustomerInputs } from '../utils/dynamicFieldValidator.js';
 
 const activeWindowQuery = (now = new Date()) => ({
   $and: [
@@ -132,17 +133,51 @@ export const buildCartSnapshot = async ({ cartItems = [], legacyBundleId = null 
       if (!product) throw new ApiError(400, 'A product in your cart is no longer available');
       const variant = selectVariant(product, item.variantId);
       const price = variant ? effectivePrice(variant.regularPrice, variant.salePrice) : effectivePrice(product.regularPrice, product.salePrice);
+      const costPrice = variant?.costPrice ?? product.costPrice ?? 0;
+
+      // Validate dynamic custom fields
+      const { sanitizedInputs, fieldSnapshots } = validateDynamicCustomerInputs(
+        product.customFields || [],
+        item.customerInputs || {},
+        { strict: true },
+      );
+
       orderItems.push({
-        itemType: 'product', productId: product._id, bundleId: null,
-        productName: product.name, productSlug: product.slug, productImage: product.thumbnail?.url || '',
-        variantId: variant?._id || null, variantName: variant?.name || '', price, quantity: item.quantity, productType: product.productType,
-        customerInputs: item.customerInputs || {},
-        components: [], bundleSavings: 0,
+        itemType: 'product',
+        productId: product._id,
+        bundleId: null,
+        productName: product.name,
+        productSlug: product.slug,
+        productImage: product.thumbnail?.url || '',
+        brand: product.brand || '',
+        variantId: variant?._id || null,
+        variantName: variant?.name || '',
+        variantSku: variant?.sku || '',
+        variantRegion: variant?.region || '',
+        variantPlatform: variant?.platform || '',
+        variantDuration: variant?.duration || '',
+        price,
+        costPrice,
+        quantity: item.quantity,
+        productType: product.productType,
+        fulfillmentType: product.fulfillmentType || 'manual',
+        customerInputs: sanitizedInputs,
+        dynamicFieldSnapshots: fieldSnapshots,
+        components: [],
+        bundleSavings: 0,
       });
+
       pricingLines.push({ itemType: 'product', productId: product._id, categoryId: product.category, bundleId: null, lineTotal: price * item.quantity });
       addInventoryRequirement(inventoryMap, {
-        productId: product._id, productName: product.name, productSlug: product.slug, productImage: product.thumbnail?.url || '',
-        variantId: variant?._id || null, variantName: variant?.name || '', quantity: item.quantity, productType: product.productType,
+        productId: product._id,
+        productName: product.name,
+        productSlug: product.slug,
+        productImage: product.thumbnail?.url || '',
+        variantId: variant?._id || null,
+        variantName: variant?.name || '',
+        quantity: item.quantity,
+        productType: product.productType,
+        unlimitedStock: Boolean(variant?.unlimitedStock || product.allowUnlimitedStock),
       });
       continue;
     }
@@ -159,22 +194,60 @@ export const buildCartSnapshot = async ({ cartItems = [], legacyBundleId = null 
       const quantityPerBundle = Number(rawComponent.quantity || 1);
       componentRetailTotalPerBundle += unitPrice * quantityPerBundle;
       components.push({
-        productId: product._id, productName: product.name, productSlug: product.slug, productImage: product.thumbnail?.url || '',
-        variantId: variant?._id || null, variantName: variant?.name || '', unitPrice, quantityPerBundle, productType: product.productType,
+        productId: product._id,
+        productName: product.name,
+        productSlug: product.slug,
+        productImage: product.thumbnail?.url || '',
+        brand: product.brand || '',
+        variantId: variant?._id || null,
+        variantName: variant?.name || '',
+        variantSku: variant?.sku || '',
+        variantRegion: variant?.region || '',
+        variantPlatform: variant?.platform || '',
+        variantDuration: variant?.duration || '',
+        unitPrice,
+        costPrice: variant?.costPrice ?? 0,
+        quantityPerBundle,
+        productType: product.productType,
+        fulfillmentType: product.fulfillmentType || 'manual',
       });
       addInventoryRequirement(inventoryMap, {
-        productId: product._id, productName: product.name, productSlug: product.slug, productImage: product.thumbnail?.url || '',
-        variantId: variant?._id || null, variantName: variant?.name || '', quantity: quantityPerBundle * item.quantity, productType: product.productType,
+        productId: product._id,
+        productName: product.name,
+        productSlug: product.slug,
+        productImage: product.thumbnail?.url || '',
+        variantId: variant?._id || null,
+        variantName: variant?.name || '',
+        quantity: quantityPerBundle * item.quantity,
+        productType: product.productType,
+        unlimitedStock: Boolean(variant?.unlimitedStock || product.allowUnlimitedStock),
       });
     }
     const price = effectivePrice(bundle.regularPrice, bundle.salePrice);
     const savingsPerBundle = Math.max(0, componentRetailTotalPerBundle - price);
     orderItems.push({
-      itemType: 'bundle', productId: null, bundleId: bundle._id,
-      productName: bundle.name, productSlug: bundle.slug, productImage: bundle.image?.url || '',
-      variantId: null, variantName: '', price, quantity: item.quantity, productType: 'bundle',
+      itemType: 'bundle',
+      productId: null,
+      bundleId: bundle._id,
+      productName: bundle.name,
+      productSlug: bundle.slug,
+      productImage: bundle.image?.url || '',
+      brand: '',
+      variantId: null,
+      variantName: '',
+      variantSku: '',
+      variantRegion: '',
+      variantPlatform: '',
+      variantDuration: '',
+      price,
+      costPrice: 0,
+      quantity: item.quantity,
+      productType: 'bundle',
+      fulfillmentType: 'manual',
       customerInputs: item.customerInputs || {},
-      components, bundleSavings: Number((savingsPerBundle * item.quantity).toFixed(2)),
+      dynamicFieldSnapshots: [],
+      components,
+      bundleSavings: Number((savingsPerBundle * item.quantity).toFixed(2)),
     });
     pricingLines.push({ itemType: 'bundle', productId: null, categoryId: null, bundleId: bundle._id, lineTotal: price * item.quantity });
     bundleSummaries.push({ bundleId: bundle._id, name: bundle.name, quantity: item.quantity, savings: Number((savingsPerBundle * item.quantity).toFixed(2)) });
@@ -182,6 +255,7 @@ export const buildCartSnapshot = async ({ cartItems = [], legacyBundleId = null 
 
   const inventoryItems = [...inventoryMap.values()];
   for (const requirement of inventoryItems) {
+    if (requirement.unlimitedStock) continue;
     const product = productMap.get(String(requirement.productId));
     const variant = requirement.variantId ? selectVariant(product, String(requirement.variantId)) : null;
     const availableStock = variant ? Number(variant.stock || 0) : Number(product.stock || 0);
@@ -308,13 +382,29 @@ export const reserveInventory = async (items, actorId = null) => {
       let before;
       let previousStock;
       if (item.variantId) {
+        if (item.unlimitedStock) {
+          before = await Product.findOneAndUpdate(
+            { _id: item.productId, status: 'active', 'variants._id': item.variantId },
+            { $inc: { 'variants.$.reservedQuantity': item.quantity, reservedQuantity: item.quantity } },
+            { new: false },
+          );
+          previousStock = 9999;
+        } else {
+          before = await Product.findOneAndUpdate(
+            { _id: item.productId, status: 'active', variants: { $elemMatch: { _id: item.variantId, active: true, stock: { $gte: item.quantity } } } },
+            { $inc: { 'variants.$.stock': -item.quantity, 'variants.$.reservedQuantity': item.quantity, reservedQuantity: item.quantity } },
+            { new: false },
+          );
+          const variant = before?.variants?.id(item.variantId);
+          previousStock = variant?.stock;
+        }
+      } else if (item.unlimitedStock) {
         before = await Product.findOneAndUpdate(
-          { _id: item.productId, status: 'active', variants: { $elemMatch: { _id: item.variantId, active: true, stock: { $gte: item.quantity } } } },
-          { $inc: { 'variants.$.stock': -item.quantity, 'variants.$.reservedQuantity': item.quantity, reservedQuantity: item.quantity } },
+          { _id: item.productId, status: 'active' },
+          { $inc: { reservedQuantity: item.quantity } },
           { new: false },
         );
-        const variant = before?.variants?.id(item.variantId);
-        previousStock = variant?.stock;
+        previousStock = 9999;
       } else {
         before = await Product.findOneAndUpdate(
           { _id: item.productId, stock: { $gte: item.quantity }, status: 'active' },
@@ -329,8 +419,8 @@ export const reserveInventory = async (items, actorId = null) => {
         product: item.productId,
         variantId: item.variantId || null,
         previousStock,
-        quantityChanged: -item.quantity,
-        newStock: previousStock - item.quantity,
+        quantityChanged: item.unlimitedStock ? 0 : -item.quantity,
+        newStock: item.unlimitedStock ? previousStock : previousStock - item.quantity,
         reason: 'Order reservation',
         changedBy: actorId,
       });
@@ -359,12 +449,28 @@ export const releaseInventory = async (items, actorId = null, orderId = null, re
     let before;
     let previousStock;
     if (item.variantId) {
+      if (item.unlimitedStock) {
+        before = await Product.findOneAndUpdate(
+          { _id: item.productId, reservedQuantity: { $gte: item.quantity }, variants: { $elemMatch: { _id: item.variantId, reservedQuantity: { $gte: item.quantity } } } },
+          { $inc: { 'variants.$.reservedQuantity': -item.quantity, reservedQuantity: -item.quantity } },
+          { new: false },
+        );
+        previousStock = 9999;
+      } else {
+        before = await Product.findOneAndUpdate(
+          { _id: item.productId, reservedQuantity: { $gte: item.quantity }, variants: { $elemMatch: { _id: item.variantId, reservedQuantity: { $gte: item.quantity } } } },
+          { $inc: { 'variants.$.stock': item.quantity, 'variants.$.reservedQuantity': -item.quantity, reservedQuantity: -item.quantity } },
+          { new: false },
+        );
+        previousStock = before?.variants?.id(item.variantId)?.stock;
+      }
+    } else if (item.unlimitedStock) {
       before = await Product.findOneAndUpdate(
-        { _id: item.productId, reservedQuantity: { $gte: item.quantity }, variants: { $elemMatch: { _id: item.variantId, reservedQuantity: { $gte: item.quantity } } } },
-        { $inc: { 'variants.$.stock': item.quantity, 'variants.$.reservedQuantity': -item.quantity, reservedQuantity: -item.quantity } },
+        { _id: item.productId, reservedQuantity: { $gte: item.quantity } },
+        { $inc: { reservedQuantity: -item.quantity } },
         { new: false },
       );
-      previousStock = before?.variants?.id(item.variantId)?.stock;
+      previousStock = 9999;
     } else {
       before = await Product.findOneAndUpdate(
         { _id: item.productId, reservedQuantity: { $gte: item.quantity } },
@@ -381,11 +487,12 @@ export const releaseInventory = async (items, actorId = null, orderId = null, re
       product: item.productId,
       variantId: item.variantId || null,
       previousStock,
-      quantityChanged: item.quantity,
-      newStock: previousStock + item.quantity,
+      quantityChanged: item.unlimitedStock ? 0 : item.quantity,
+      newStock: item.unlimitedStock ? previousStock : previousStock + item.quantity,
       reason,
       order: orderId,
       changedBy: actorId,
     });
   }
 };
+

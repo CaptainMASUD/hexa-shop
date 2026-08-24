@@ -386,7 +386,6 @@ export default function ProductsPage() {
 
       return count
     }, [
-      paramsKey,
       slug,
       searchParams,
     ])

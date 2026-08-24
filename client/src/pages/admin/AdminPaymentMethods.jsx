@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { FaEdit, FaPlus, FaQrcode, FaTrash } from 'react-icons/fa'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { Delete02Icon, Edit02Icon, PlusSignIcon, QrCode01Icon } from '@hugeicons/core-free-icons'
 import { adminDelete, adminGet, adminPost, adminPut } from '../../api/admin.api'
 import { apiErrorMessage } from '../../api/client'
 import { useToast } from '../../contexts/ToastContext'
@@ -105,7 +106,7 @@ export default function AdminPaymentMethods() {
             }}
             className="hexa-btn"
           >
-            <FaPlus />Add method
+            <HugeiconsIcon icon={PlusSignIcon} size={15} /> Add method
           </button>
         }
       />
@@ -167,7 +168,7 @@ export default function AdminPaymentMethods() {
                       onClick={() => setQrModal(item)}
                       className="inline-flex items-center gap-1 rounded-lg border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-xs font-medium text-purple-300 hover:bg-purple-500/20 transition"
                     >
-                      <FaQrcode /> View
+                      <HugeiconsIcon icon={QrCode01Icon} size={14} /> View
                     </button>
                   ) : (
                     <span className="text-xs text-gray-500">—</span>
@@ -180,10 +181,10 @@ export default function AdminPaymentMethods() {
                 <td className="px-5 py-4">
                   <div className="flex items-center gap-1">
                     <button onClick={() => edit(item)} className="p-2 text-purple-400 hover:text-purple-300 transition" title="Edit method">
-                      <FaEdit />
+                      <HugeiconsIcon icon={Edit02Icon} size={16} />
                     </button>
                     <button onClick={() => disable(item._id)} className="p-2 text-rose-400 hover:text-rose-300 transition" title="Disable method">
-                      <FaTrash />
+                      <HugeiconsIcon icon={Delete02Icon} size={16} />
                     </button>
                   </div>
                 </td>

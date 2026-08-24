@@ -28,6 +28,7 @@ export const createInventoryItem = asyncHandler(async (req, res) => {
   const item = await InventoryItem.create({
     product: product._id,
     variantId: req.body.variantId || null,
+    itemType: req.body.itemType || 'license_key',
     previewLabel: req.body.previewLabel,
     expiresAt: req.body.expiresAt ? new Date(req.body.expiresAt) : null,
     encryptedPayload: encryptJson(req.body.payload),
@@ -35,6 +36,63 @@ export const createInventoryItem = asyncHandler(async (req, res) => {
   });
   await writeAudit(req, 'inventory_credential_created', 'InventoryItem', item._id, { productId: product._id, previewLabel: item.previewLabel });
   return success(res, { status: 201, message: 'Protected inventory item created', data: { ...item.toObject(), encryptedPayload: undefined } });
+});
+
+export const createBulkInventoryItems = asyncHandler(async (req, res) => {
+  const { productId, variantId, itemType = 'license_key', lines = [], previewPrefix = '', expiresAt, instructions = '' } = req.body;
+  const product = await Product.findById(productId);
+  if (!product) throw new ApiError(404, 'Product not found');
+  if (variantId && !product.variants.id(variantId)) throw new ApiError(400, 'Product plan not found');
+
+  const cleanLines = lines.map((l) => String(l).trim()).filter(Boolean);
+  if (!cleanLines.length) throw new ApiError(422, 'No valid inventory lines provided');
+
+  const batchId = `BATCH-${Date.now()}`;
+  const docs = cleanLines.map((line, index) => {
+    let payload;
+    let previewLabel = previewPrefix ? `${previewPrefix} #${index + 1}` : line.slice(0, 30);
+
+    if (itemType === 'license_key') {
+      payload = { licenseKey: line, instructions };
+      previewLabel = previewPrefix ? `${previewPrefix} #${index + 1}` : `Key: ${line.slice(0, 8)}...`;
+    } else if (itemType === 'account_credentials') {
+      // Check if line is formatted as email:password or email|password
+      const parts = line.split(/[:|\t,]/);
+      if (parts.length >= 2) {
+        payload = { email: parts[0].trim(), password: parts[1].trim(), pin: parts[2]?.trim() || '', instructions };
+        previewLabel = parts[0].trim();
+      } else {
+        payload = { details: line, instructions };
+      }
+    } else {
+      payload = { details: line, instructions };
+    }
+
+    return {
+      product: product._id,
+      variantId: variantId || null,
+      itemType,
+      batchId,
+      previewLabel,
+      expiresAt: expiresAt ? new Date(expiresAt) : null,
+      encryptedPayload: encryptJson(payload),
+      createdBy: req.user._id,
+      status: 'available',
+    };
+  });
+
+  const inserted = await InventoryItem.insertMany(docs);
+  await writeAudit(req, 'inventory_bulk_created', 'InventoryItem', product._id, {
+    count: inserted.length,
+    itemType,
+    variantId,
+  });
+
+  return success(res, {
+    status: 201,
+    message: `Successfully imported ${inserted.length} digital inventory item(s)`,
+    data: { count: inserted.length, batchId },
+  });
 });
 
 export const adjustStock = asyncHandler(async (req, res) => {

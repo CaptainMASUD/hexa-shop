@@ -18,16 +18,33 @@ const buildProductQuery = async (query, adminMode = false) => {
       : await Category.findOne({ slug: query.category }).select('_id').lean();
     filter.category = category?._id || new mongoose.Types.ObjectId();
   }
-  if (query.type) filter.productType = query.type;
+  const type = query.productType || query.type;
+  if (type) filter.productType = type;
+  if (query.brand) filter.brand = { $regex: new RegExp(query.brand.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') };
+  if (query.region) filter['variants.region'] = { $regex: new RegExp(query.region.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') };
+  if (query.platform) filter['variants.platform'] = { $regex: new RegExp(query.platform.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') };
   if (query.featured) filter.featured = query.featured === 'true';
   if (query.popular) filter.popular = query.popular === 'true';
-  if (query.availability === 'in_stock') filter.$or = [{ stock: { $gt: 0 } }, { variants: { $elemMatch: { stock: { $gt: 0 }, active: true } } }];
-  if (query.availability === 'out_of_stock') filter.$and = [{ stock: { $lte: 0 } }, { variants: { $not: { $elemMatch: { stock: { $gt: 0 }, active: true } } } }];
+  if (query.availability === 'in_stock') {
+    filter.$or = [
+      { allowUnlimitedStock: true },
+      { stock: { $gt: 0 } },
+      { variants: { $elemMatch: { $or: [{ unlimitedStock: true }, { stock: { $gt: 0 } }], active: true } } },
+    ];
+  }
+  if (query.availability === 'out_of_stock') {
+    filter.$and = [
+      { allowUnlimitedStock: { $ne: true } },
+      { stock: { $lte: 0 } },
+      { variants: { $not: { $elemMatch: { $or: [{ unlimitedStock: true }, { stock: { $gt: 0 } }], active: true } } } },
+    ];
+  }
   return filter;
 };
 
 const sortMap = {
   newest: { createdAt: -1 },
+  order: { sortOrder: 1, createdAt: -1 },
   popular: { soldQuantity: -1, createdAt: -1 },
   price_asc: { salePrice: 1, regularPrice: 1 },
   price_desc: { salePrice: -1, regularPrice: -1 },
@@ -69,6 +86,17 @@ const effectivePriceExpression = {
 };
 
 const addStockStatus = (product) => {
+  if (product.allowUnlimitedStock) {
+    product.stockStatus = 'in_stock';
+    return product;
+  }
+  if (product.variants?.length) {
+    const hasUnlimited = product.variants.some((v) => v.active && v.unlimitedStock);
+    if (hasUnlimited) {
+      product.stockStatus = 'in_stock';
+      return product;
+    }
+  }
   const stock = product.variants?.length
     ? product.variants.reduce((sum, variant) => sum + (variant.active ? Number(variant.stock || 0) : 0), 0)
     : Number(product.stock || 0);

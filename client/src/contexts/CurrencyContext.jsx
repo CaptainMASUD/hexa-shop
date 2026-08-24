@@ -9,6 +9,7 @@ export function CurrencyProvider({children}){
   const currencies=settings?.currencies?.filter(c=>c.active)||[{code:'BDT',symbol:'৳',rateFromBDT:1}]
   const selected=currencies.find(c=>c.code===currency)||currencies[0]
   const format=(bdt)=>`${selected?.symbol||'৳'}${(Number(bdt||0)*Number(selected?.rateFromBDT||1)).toLocaleString(undefined,{maximumFractionDigits:selected?.code==='BDT'?0:2})}`
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const value=useMemo(()=>({settings,currency,setCurrency,currencies,format}),[settings,currency])
   return <CurrencyContext.Provider value={value}>{children}</CurrencyContext.Provider>
 }

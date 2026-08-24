@@ -1,15 +1,17 @@
 import { useState } from 'react'
+import { HugeiconsIcon } from '@hugeicons/react'
 import {
-  FaCheck,
-  FaCopy,
-  FaEye,
-  FaEyeSlash,
-  FaKey,
-  FaLink,
-  FaLock,
-  FaShieldAlt,
-  FaUser,
-} from 'react-icons/fa'
+  CheckmarkCircle01Icon,
+  Clock01Icon,
+  Copy01Icon,
+  Key01Icon,
+  Link01Icon,
+  LockPasswordIcon,
+  Shield01Icon,
+  UserCircleIcon,
+  ViewIcon,
+  ViewOffSlashIcon,
+} from '@hugeicons/core-free-icons'
 
 function CopyButton({ text, label = 'Copy' }) {
   const [copied, setCopied] = useState(false)
@@ -36,7 +38,7 @@ function CopyButton({ text, label = 'Copy' }) {
       }`}
       title="Copy to clipboard"
     >
-      {copied ? <FaCheck className="text-[10px]" /> : <FaCopy className="text-[10px]" />}
+      {copied ? <HugeiconsIcon icon={CheckmarkCircle01Icon} size={12} /> : <HugeiconsIcon icon={Copy01Icon} size={12} />}
       <span>{copied ? 'Copied!' : label}</span>
     </button>
   )
@@ -51,7 +53,7 @@ function CredentialField({ label, value, icon: Icon, isSecret = false }) {
     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-card)]/80 p-3.5 shadow-sm">
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-1.5 text-xs font-medium text-[var(--hexa-muted)]">
-          {Icon && <Icon className="text-purple-400 shrink-0" />}
+          {Icon && <HugeiconsIcon icon={Icon} size={14} className="text-purple-400 shrink-0" />}
           <span>{label}</span>
         </div>
         <p className="mt-1 font-mono text-sm font-bold text-[var(--hexa-text)] break-all select-all">
@@ -65,7 +67,7 @@ function CredentialField({ label, value, icon: Icon, isSecret = false }) {
             onClick={() => setShow((prev) => !prev)}
             className="inline-flex items-center gap-1 rounded-lg border border-[var(--hexa-border)] bg-[var(--hexa-card)] px-2.5 py-1 text-xs font-semibold text-[var(--hexa-muted)] hover:text-[var(--hexa-text)] transition"
           >
-            {show ? <FaEyeSlash className="text-xs" /> : <FaEye className="text-xs" />}
+            {show ? <HugeiconsIcon icon={ViewOffSlashIcon} size={13} /> : <HugeiconsIcon icon={ViewIcon} size={13} />}
             <span>{show ? 'Hide' : 'Show'}</span>
           </button>
         )}
@@ -96,7 +98,7 @@ function SingleCredentialsCard({ data }) {
     return (
       <div className="rounded-2xl border border-emerald-500/30 bg-emerald-500/[0.04] p-4 sm:p-5">
         <div className="flex items-center gap-2 text-emerald-400 font-bold text-sm">
-          <FaCheck className="text-xs rounded-full bg-emerald-500/20 p-1 h-5 w-5" />
+          <HugeiconsIcon icon={CheckmarkCircle01Icon} size={16} className="rounded-full bg-emerald-500/20 p-0.5 text-emerald-400" />
           <span>Direct In-Game Top-Up Completed</span>
         </div>
         <p className="mt-1.5 text-xs text-[var(--hexa-muted)]">
@@ -105,7 +107,7 @@ function SingleCredentialsCard({ data }) {
 
         {Object.keys(gameAccount).length > 0 && (
           <div className="mt-3 flex flex-wrap gap-2">
-            {Object.entries(gameAccount).filter(([_, v]) => v).map(([k, v]) => (
+            {Object.entries(gameAccount).filter(([, v]) => v).map(([k, v]) => (
               <span key={k} className="inline-flex items-center gap-1 rounded-lg border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 text-xs font-semibold text-emerald-300">
                 <span className="capitalize text-[var(--hexa-muted)] text-[11px]">{k.replace(/([A-Z])/g, ' $1')}:</span>
                 <span className="font-mono">{String(v)}</span>
@@ -127,8 +129,12 @@ function SingleCredentialsCard({ data }) {
   // Common field mappings
   const email = data.email || data.username || data.user || data.login || data.account
   const password = data.password || data.pass || data.secret
-  const key = data.key || data.licenseKey || data.license || data.code || data.serial || data.activationCode
-  const pin = data.pin || data.profilePin || data.profile || data.screen
+  const key = data.licenseKey || data.key || data.license || data.serial
+  const activationCode = data.activationCode || (data.code && data.code !== key ? data.code : '')
+  const profileName = data.profileName || data.profileSlot || (data.profile && typeof data.profile === 'string' && isNaN(data.profile) ? data.profile : '')
+  const pin = data.pin || data.profilePin || data.screen || (data.profile && !isNaN(data.profile) ? data.profile : '')
+  const expiryDate = data.expiryDate || data.expiresAt || data.validUntil || data.expiration
+  const referenceId = data.referenceId || data.transactionId || data.trxId || data.orderRef
   const url = data.url || data.link || data.loginUrl || data.downloadUrl
   const notes = data.instructions || data.notes || data.note || data.guide
 
@@ -136,8 +142,12 @@ function SingleCredentialsCard({ data }) {
   const standardKeys = new Set([
     'email', 'username', 'user', 'login', 'account',
     'password', 'pass', 'secret',
-    'key', 'licenseKey', 'license', 'code', 'serial', 'activationCode',
+    'key', 'licenseKey', 'license', 'serial',
+    'activationCode', 'code',
+    'profileName', 'profileSlot',
     'pin', 'profilePin', 'profile', 'screen',
+    'expiryDate', 'expiresAt', 'validUntil', 'expiration',
+    'referenceId', 'transactionId', 'trxId', 'orderRef',
     'url', 'link', 'loginUrl', 'downloadUrl',
     'instructions', 'notes', 'note', 'guide',
     'productName', 'variantName', 'productId', 'variantId',
@@ -148,18 +158,22 @@ function SingleCredentialsCard({ data }) {
 
   return (
     <div className="space-y-2.5">
-      {email && <CredentialField label="Email / Username" value={email} icon={FaUser} />}
-      {password && <CredentialField label="Password" value={password} icon={FaLock} isSecret />}
-      {key && <CredentialField label="License / Product Key" value={key} icon={FaKey} />}
-      {pin && <CredentialField label="Profile / PIN / Screen" value={pin} icon={FaShieldAlt} />}
-      {url && <CredentialField label="Login / Download Link" value={url} icon={FaLink} />}
+      {email && <CredentialField label="Email / Username" value={email} icon={UserCircleIcon} />}
+      {password && <CredentialField label="Password" value={password} icon={LockPasswordIcon} isSecret />}
+      {profileName && <CredentialField label="Profile Name / Slot" value={profileName} icon={UserCircleIcon} />}
+      {pin && <CredentialField label="Profile PIN / Screen" value={pin} icon={Shield01Icon} />}
+      {key && <CredentialField label="License / Product Key" value={key} icon={Key01Icon} />}
+      {activationCode && <CredentialField label="Activation Code" value={activationCode} icon={Key01Icon} />}
+      {expiryDate && <CredentialField label="Expiry Date / Duration" value={typeof expiryDate === 'string' && expiryDate.includes('T') ? new Date(expiryDate).toLocaleDateString() : String(expiryDate)} icon={Clock01Icon} />}
+      {referenceId && <CredentialField label="Transaction / Reference ID" value={referenceId} icon={Key01Icon} />}
+      {url && <CredentialField label="Login / Download Link" value={url} icon={Link01Icon} />}
 
       {extraEntries.map(([k, v]) => (
         <CredentialField
           key={k}
           label={k.replace(/([A-Z])/g, ' $1').replace(/^./, (str) => str.toUpperCase())}
           value={typeof v === 'object' ? JSON.stringify(v) : String(v)}
-          icon={FaKey}
+          icon={Key01Icon}
         />
       ))}
 
@@ -175,7 +189,7 @@ function SingleCredentialsCard({ data }) {
   )
 }
 
-export default function DeliveryDetailsViewer({ details, summary }) {
+export default function DeliveryDetailsViewer({ details }) {
   if (!details) {
     return (
       <div className="rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-card)] p-4 text-center text-sm text-[var(--hexa-muted)]">

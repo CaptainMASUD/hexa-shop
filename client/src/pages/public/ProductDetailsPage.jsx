@@ -15,7 +15,6 @@ import {
 } from '@hugeicons/react'
 
 import {
-  ArrowDown01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
   FlashIcon,
@@ -58,6 +57,8 @@ import {
 import {
   useCurrency,
 } from '../../contexts/CurrencyContext'
+
+import DynamicCustomerForm from '../../components/DynamicCustomerForm'
 
 import usePageMeta from '../../hooks/usePageMeta'
 
@@ -393,60 +394,65 @@ export default function ProductDetailsPage() {
   /* Input Validation                                                       */
   /* ====================================================================== */
 
-  const validateInputs =
-    () => {
-      if (
-        !product.customFields
-          ?.length
-      ) {
-        return true
-      }
+  const validateInputs = () => {
+    if (!product.customFields?.length) return true
+    const errors = {}
 
-      const errors = {}
+    for (const field of product.customFields) {
+      const val = customerInputs[field.name]
+      const strVal = String(val ?? '').trim()
 
-      for (
-        const field of
-        product.customFields
-      ) {
-        const value =
-          String(
-            customerInputs[
-              field.name
-            ] || ''
-          ).trim()
-
-        if (
-          field.required &&
-          !value
-        ) {
-          errors[
-            field.name
-          ] =
-            `${field.label} is required`
+      if (field.required) {
+        if (field.type === 'checkbox' && Array.isArray(val) && val.length === 0) {
+          errors[field.name] = `${field.label} is required`
+          continue
+        }
+        if (field.type === 'toggle' && !val) {
+          errors[field.name] = `${field.label} is required`
+          continue
+        }
+        if (!strVal) {
+          errors[field.name] = `${field.label} is required`
+          continue
         }
       }
 
-      setInputErrors(
-        errors
-      )
+      if (!strVal) continue
 
-      if (
-        Object.keys(
-          errors
-        ).length > 0
-      ) {
-        notify(
-          Object.values(
-            errors
-          )[0],
-          'error'
-        )
-
-        return false
+      if (field.type === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(strVal)) {
+        errors[field.name] = `Please enter a valid email for ${field.label}`
       }
-
-      return true
+      if (field.type === 'number') {
+        const num = Number(strVal)
+        if (Number.isNaN(num)) errors[field.name] = `${field.label} must be a valid number`
+        else if (field.validation?.min !== undefined && num < field.validation.min) errors[field.name] = `${field.label} must be at least ${field.validation.min}`
+        else if (field.validation?.max !== undefined && num > field.validation.max) errors[field.name] = `${field.label} must be at most ${field.validation.max}`
+      }
+      if (field.validation?.minLength && strVal.length < field.validation.minLength) {
+        errors[field.name] = `${field.label} must be at least ${field.validation.minLength} characters`
+      }
+      if (field.validation?.maxLength && strVal.length > field.validation.maxLength) {
+        errors[field.name] = `${field.label} must be at most ${field.validation.maxLength} characters`
+      }
+      if (field.validation?.regex) {
+        try {
+          const reg = new RegExp(field.validation.regex)
+          if (!reg.test(strVal)) {
+            errors[field.name] = field.validation.customErrorMessage || `Invalid format for ${field.label}`
+          }
+        } catch {
+          // ignore bad admin regex
+        }
+      }
     }
+
+    setInputErrors(errors)
+    if (Object.keys(errors).length > 0) {
+      notify(Object.values(errors)[0], 'error')
+      return false
+    }
+    return true
+  }
 
   /* ====================================================================== */
   /* Add to Cart                                                            */
@@ -996,338 +1002,28 @@ export default function ProductDetailsPage() {
             {/* Required Information                                        */}
             {/* ============================================================ */}
 
-            {product.customFields
-              ?.length >
-              0 && (
-              <section
-                className="
-                  rounded-[18px]
-
-                  border
-                  border-[var(--hexa-border)]
-
-                  bg-[var(--hexa-card)]
-
-                  p-5
-                  sm:p-6
-                "
-              >
+            {product.customFields?.length > 0 && (
+              <section className="rounded-[18px] border border-[var(--hexa-border)] bg-[var(--hexa-card)] p-5 sm:p-6">
                 <SectionTitle
-                  icon={
-                    UserCircleIcon
-                  }
+                  icon={UserCircleIcon}
                   number="1"
                   title={
-                    product.productType ===
-                    'game'
-                      ? 'Player information'
-                      : 'Required information'
+                    product.productType === 'game' || product.productType === 'game_topup'
+                      ? 'Player & Account Information'
+                      : 'Required Information'
                   }
                 />
 
-                <div
-                  className="
-                    mt-5
-
-                    grid
-                    gap-4
-
-                    sm:grid-cols-2
-                  "
-                >
-                  {product.customFields.map(
-                    (
-                      field
-                    ) => (
-                      <div
-                        key={
-                          field.name
-                        }
-                        className={
-                          product
-                            .customFields
-                            .length ===
-                          1
-                            ? 'sm:col-span-2'
-                            : ''
-                        }
-                      >
-                        <label
-                          className="
-                            block
-                          "
-                        >
-                          <span
-                            className="
-                              mb-1.5
-
-                              flex
-                              items-center
-                              justify-between
-                              gap-3
-
-                              text-[12px]
-                              font-medium
-
-                              text-[var(--hexa-text)]
-                            "
-                          >
-                            <span>
-                              {
-                                field.label
-                              }
-
-                              {field.required && (
-                                <span
-                                  className="
-                                    ml-1
-
-                                    text-purple-500
-                                  "
-                                >
-                                  *
-                                </span>
-                              )}
-                            </span>
-
-                            {field.helpText && (
-                              <span
-                                className="
-                                  max-w-[170px]
-                                  truncate
-
-                                  text-[10px]
-                                  font-normal
-
-                                  text-[var(--hexa-muted)]
-                                "
-                              >
-                                {
-                                  field.helpText
-                                }
-                              </span>
-                            )}
-                          </span>
-
-                          {field.type ===
-                          'select' ? (
-                            <div
-                              className="
-                                relative
-                              "
-                            >
-                              <select
-                                value={
-                                  customerInputs[
-                                    field
-                                      .name
-                                  ] ||
-                                  ''
-                                }
-                                onChange={(
-                                  event
-                                ) => {
-                                  setCustomerInputs(
-                                    (
-                                      current
-                                    ) => ({
-                                      ...current,
-
-                                      [field.name]:
-                                        event
-                                          .target
-                                          .value,
-                                    })
-                                  )
-
-                                  if (
-                                    inputErrors[
-                                      field
-                                        .name
-                                    ]
-                                  ) {
-                                    setInputErrors(
-                                      (
-                                        current
-                                      ) => ({
-                                        ...current,
-
-                                        [field.name]:
-                                          null,
-                                      })
-                                    )
-                                  }
-                                }}
-                                className={`
-                                  hexa-input
-
-                                  !h-11
-                                  !appearance-none
-                                  !rounded-xl
-                                  !py-0
-                                  !pr-10
-
-                                  text-sm
-
-                                  transition-[border-color,box-shadow]
-                                  duration-150
-
-                                  ${
-                                    inputErrors[
-                                      field
-                                        .name
-                                    ]
-                                      ? '!border-rose-500 focus:!shadow-[0_0_0_3px_rgba(244,63,94,.08)]'
-                                      : 'focus:!border-purple-500/50 focus:!shadow-[0_0_0_3px_rgba(147,51,234,.07)]'
-                                  }
-                                `}
-                              >
-                                {(
-                                  field.options ||
-                                  []
-                                ).map(
-                                  (
-                                    option
-                                  ) => (
-                                    <option
-                                      key={
-                                        option
-                                      }
-                                      value={
-                                        option
-                                      }
-                                    >
-                                      {
-                                        option
-                                      }
-                                    </option>
-                                  )
-                                )}
-                              </select>
-
-                              <UIIcon
-                                icon={
-                                  ArrowDown01Icon
-                                }
-                                size={14}
-                                strokeWidth={
-                                  1.8
-                                }
-                                className="
-                                  pointer-events-none
-
-                                  absolute
-                                  right-3
-                                  top-1/2
-
-                                  -translate-y-1/2
-
-                                  text-[var(--hexa-muted)]
-                                "
-                              />
-                            </div>
-                          ) : (
-                            <input
-                              type={
-                                field.type ===
-                                'number'
-                                  ? 'number'
-                                  : 'text'
-                              }
-                              placeholder={
-                                field.placeholder ||
-                                `Enter ${field.label}`
-                              }
-                              value={
-                                customerInputs[
-                                  field
-                                    .name
-                                ] ||
-                                ''
-                              }
-                              onChange={(
-                                event
-                              ) => {
-                                setCustomerInputs(
-                                  (
-                                    current
-                                  ) => ({
-                                    ...current,
-
-                                    [field.name]:
-                                      event
-                                        .target
-                                        .value,
-                                  })
-                                )
-
-                                if (
-                                  inputErrors[
-                                    field
-                                      .name
-                                  ]
-                                ) {
-                                  setInputErrors(
-                                    (
-                                      current
-                                    ) => ({
-                                      ...current,
-
-                                      [field.name]:
-                                        null,
-                                    })
-                                  )
-                                }
-                              }}
-                              className={`
-                                hexa-input
-
-                                !h-11
-                                !rounded-xl
-
-                                text-sm
-
-                                transition-[border-color,box-shadow]
-                                duration-150
-
-                                ${
-                                  inputErrors[
-                                    field
-                                      .name
-                                  ]
-                                    ? '!border-rose-500 focus:!shadow-[0_0_0_3px_rgba(244,63,94,.08)]'
-                                    : 'focus:!border-purple-500/50 focus:!shadow-[0_0_0_3px_rgba(147,51,234,.07)]'
-                                }
-                              `}
-                            />
-                          )}
-                        </label>
-
-                        {inputErrors[
-                          field
-                            .name
-                        ] && (
-                          <p
-                            className="
-                              mt-1.5
-
-                              text-[11px]
-                              font-medium
-
-                              text-rose-500
-                            "
-                          >
-                            {
-                              inputErrors[
-                                field
-                                  .name
-                              ]
-                            }
-                          </p>
-                        )}
-                      </div>
-                    )
-                  )}
+                <div className="mt-5">
+                  <DynamicCustomerForm
+                    fields={product.customFields}
+                    values={customerInputs}
+                    onChange={(newInputs) => {
+                      setCustomerInputs(newInputs)
+                      setInputErrors({})
+                    }}
+                    errors={inputErrors}
+                  />
                 </div>
               </section>
             )}
@@ -1484,18 +1180,21 @@ export default function ProductDetailsPage() {
                                 }
                               </p>
 
-                              <p
-                                className="
-                                  mt-1
-
-                                  text-[11px]
-
-                                  text-[var(--hexa-muted)]
-                                "
-                              >
-                                {item.duration ||
-                                  'Instant delivery'}
-                              </p>
+                              <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                                <span className="text-[11px] text-[var(--hexa-muted)]">
+                                  {item.duration || 'Instant delivery'}
+                                </span>
+                                {item.region && (
+                                  <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold text-purple-400">
+                                    {item.region}
+                                  </span>
+                                )}
+                                {item.platform && (
+                                  <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] font-semibold text-sky-400">
+                                    {item.platform}
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
                             {selected && (
@@ -2719,6 +2418,7 @@ function ReviewsBlock({
   useEffect(() => {
     loadReviews()
     checkEligibility()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     product._id,
     user,

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { FaEdit, FaPlus, FaTrash } from 'react-icons/fa'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { Delete02Icon, Edit02Icon, PlusSignIcon } from '@hugeicons/core-free-icons'
 import { adminDelete, adminGet, adminPost, adminPut } from '../../api/admin.api'
 import { apiErrorMessage } from '../../api/client'
 import { useToast } from '../../contexts/ToastContext'
@@ -7,6 +8,196 @@ import AdminPageHeader from '../../components/AdminPageHeader'
 import Modal from '../../components/Modal'
 import ImageUploader from '../../components/ImageUploader'
 import StatusBadge from '../../components/StatusBadge'
-const blank={title:'',subtitle:'',image:{url:'',publicId:''},buttonText:'Shop now',buttonLink:'/products',badge:'',placement:'hero',targetType:'none',targetId:null,displayOrder:0,active:true,startDate:null,endDate:null}
-const localDate=(value)=>value?new Date(value).toISOString().slice(0,16):''
-export default function AdminBanners(){const[items,setItems]=useState([]);const[form,setForm]=useState(blank);const[editing,setEditing]=useState(null);const[open,setOpen]=useState(false);const{notify}=useToast();const load=()=>adminGet('/banners').then(r=>setItems(r.data));useEffect(()=>{load().catch(()=>{})},[]);const edit=item=>{setEditing(item._id);setForm({...blank,...item,image:item.image||blank.image,startDate:localDate(item.startDate),endDate:localDate(item.endDate)});setOpen(true)};const save=async e=>{e.preventDefault();if(!form.image?.url){notify('Upload a banner image first','error');return}const payload={...form,startDate:form.startDate?new Date(form.startDate).toISOString():null,endDate:form.endDate?new Date(form.endDate).toISOString():null};try{editing?await adminPut(`/banners/${editing}`,payload):await adminPost('/banners',payload);notify('Banner saved');setOpen(false);load()}catch(error){notify(apiErrorMessage(error),'error')}};const disable=async id=>{if(!confirm('Disable this banner?'))return;await adminDelete(`/banners/${id}`);notify('Banner disabled');load()};return <><AdminPageHeader title="Homepage banners" description="Manage hero creative, CTA order and optional schedule without redeploying the frontend." action={<button onClick={()=>{setEditing(null);setForm(blank);setOpen(true)}} className="hexa-btn"><FaPlus/>Add banner</button>}/><div className="grid gap-5 lg:grid-cols-2">{items.map(item=><div key={item._id} className="hexa-card overflow-hidden"><div className="aspect-[16/6] bg-white/5">{item.image?.url&&<img src={item.image.url} alt="" className="h-full w-full object-cover"/>}</div><div className="p-5"><div className="flex items-start justify-between gap-4"><div><h2 className="font-semibold">{item.title}</h2><p className="mt-1 text-sm text-gray-500">{item.subtitle}</p></div><StatusBadge value={item.active?'active':'inactive'}/></div><div className="mt-4 flex justify-between border-t border-white/5 pt-4"><span className="text-xs text-gray-600">{item.placement} · Order {item.displayOrder} · {item.buttonText}</span><div><button onClick={()=>edit(item)} className="p-2 text-purple-300"><FaEdit/></button><button onClick={()=>disable(item._id)} className="p-2 text-rose-400"><FaTrash/></button></div></div></div></div>)}</div><Modal open={open} onClose={()=>setOpen(false)} title={editing?'Edit banner':'Create banner'}><form onSubmit={save} className="space-y-4"><label><span className="hexa-label">Title</span><input required className="hexa-input" value={form.title} onChange={e=>setForm({...form,title:e.target.value})}/></label><label><span className="hexa-label">Subtitle</span><textarea rows="3" className="hexa-input" value={form.subtitle} onChange={e=>setForm({...form,subtitle:e.target.value})}/></label><ImageUploader folder="banners" label="Banner image" value={form.image} onChange={image=>setForm({...form,image})}/><div className="grid gap-4 sm:grid-cols-2"><label><span className="hexa-label">Placement</span><select className="hexa-input" value={form.placement} onChange={e=>setForm({...form,placement:e.target.value})}>{['hero','category','product','bundle','offer','midpage'].map(x=><option key={x}>{x}</option>)}</select></label><label><span className="hexa-label">Badge</span><input className="hexa-input" value={form.badge} onChange={e=>setForm({...form,badge:e.target.value})}/></label><label><span className="hexa-label">Button text</span><input className="hexa-input" value={form.buttonText} onChange={e=>setForm({...form,buttonText:e.target.value})}/></label><label><span className="hexa-label">Button link</span><input className="hexa-input" value={form.buttonLink} onChange={e=>setForm({...form,buttonLink:e.target.value})}/></label><label><span className="hexa-label">Start date (optional)</span><input type="datetime-local" className="hexa-input" value={form.startDate||''} onChange={e=>setForm({...form,startDate:e.target.value})}/></label><label><span className="hexa-label">End date (optional)</span><input type="datetime-local" className="hexa-input" value={form.endDate||''} onChange={e=>setForm({...form,endDate:e.target.value})}/></label></div><div className="flex items-center justify-between"><label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={form.active} onChange={e=>setForm({...form,active:e.target.checked})}/>Active</label><input type="number" min="0" className="hexa-input !w-28" value={form.displayOrder} onChange={e=>setForm({...form,displayOrder:Number(e.target.value)})}/></div><div className="flex justify-end gap-3"><button type="button" className="hexa-btn-secondary" onClick={()=>setOpen(false)}>Cancel</button><button className="hexa-btn">Save banner</button></div></form></Modal></>}
+
+const blank = {
+  title: '',
+  subtitle: '',
+  image: { url: '', publicId: '' },
+  buttonText: 'Shop now',
+  buttonLink: '/products',
+  badge: '',
+  placement: 'hero',
+  targetType: 'none',
+  targetId: null,
+  displayOrder: 0,
+  active: true,
+  startDate: null,
+  endDate: null,
+}
+
+const localDate = (value) => (value ? new Date(value).toISOString().slice(0, 16) : '')
+
+export default function AdminBanners() {
+  const [items, setItems] = useState([])
+  const [form, setForm] = useState(blank)
+  const [editing, setEditing] = useState(null)
+  const [open, setOpen] = useState(false)
+  const { notify } = useToast()
+
+  const load = () => adminGet('/banners').then((r) => setItems(r.data))
+
+  useEffect(() => {
+    load().catch(() => {})
+  }, [])
+
+  const edit = (item) => {
+    setEditing(item._id)
+    setForm({
+      ...blank,
+      ...item,
+      image: item.image || blank.image,
+      startDate: localDate(item.startDate),
+      endDate: localDate(item.endDate),
+    })
+    setOpen(true)
+  }
+
+  const save = async (e) => {
+    e.preventDefault()
+    if (!form.image?.url) {
+      notify('Upload a banner image first', 'error')
+      return
+    }
+    const payload = {
+      ...form,
+      startDate: form.startDate ? new Date(form.startDate).toISOString() : null,
+      endDate: form.endDate ? new Date(form.endDate).toISOString() : null,
+    }
+    try {
+      if (editing) {
+        await adminPut(`/banners/${editing}`, payload)
+      } else {
+        await adminPost('/banners', payload)
+      }
+      notify('Banner saved')
+      setOpen(false)
+      load()
+    } catch (error) {
+      notify(apiErrorMessage(error), 'error')
+    }
+  }
+
+  const disable = async (id) => {
+    if (!confirm('Disable this banner?')) return
+    await adminDelete(`/banners/${id}`)
+    notify('Banner disabled')
+    load()
+  }
+
+  return (
+    <>
+      <AdminPageHeader
+        title="Homepage banners"
+        description="Manage hero creative, CTA order and optional schedule without redeploying the frontend."
+        action={
+          <button
+            onClick={() => {
+              setEditing(null)
+              setForm(blank)
+              setOpen(true)
+            }}
+            className="hexa-btn"
+          >
+            <HugeiconsIcon icon={PlusSignIcon} size={15} /> Add banner
+          </button>
+        }
+      />
+      <div className="grid gap-5 lg:grid-cols-2">
+        {items.map((item) => (
+          <div key={item._id} className="hexa-card overflow-hidden">
+            <div className="aspect-[16/6] bg-white/5">
+              {item.image?.url && <img src={item.image.url} alt="" className="h-full w-full object-cover" />}
+            </div>
+            <div className="p-5">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="font-semibold">{item.title}</h2>
+                  <p className="mt-1 text-sm text-gray-500">{item.subtitle}</p>
+                </div>
+                <StatusBadge value={item.active ? 'active' : 'inactive'} />
+              </div>
+              <div className="mt-4 flex justify-between border-t border-white/5 pt-4">
+                <span className="text-xs text-gray-600">
+                  {item.placement} · Order {item.displayOrder} · {item.buttonText}
+                </span>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => edit(item)}
+                    className="rounded-lg p-2 text-purple-300 hover:bg-purple-500/10"
+                    title="Edit Banner"
+                  >
+                    <HugeiconsIcon icon={Edit02Icon} size={16} />
+                  </button>
+                  <button
+                    onClick={() => disable(item._id)}
+                    className="rounded-lg p-2 text-rose-400 hover:bg-rose-500/10"
+                    title="Disable Banner"
+                  >
+                    <HugeiconsIcon icon={Delete02Icon} size={16} />
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit banner' : 'Create banner'}>
+        <form onSubmit={save} className="space-y-4">
+          <label>
+            <span className="hexa-label">Title</span>
+            <input required className="hexa-input" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
+          </label>
+          <label>
+            <span className="hexa-label">Subtitle</span>
+            <textarea rows="3" className="hexa-input" value={form.subtitle} onChange={(e) => setForm({ ...form, subtitle: e.target.value })} />
+          </label>
+          <ImageUploader folder="banners" label="Banner image" value={form.image} onChange={(image) => setForm({ ...form, image })} />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <label>
+              <span className="hexa-label">Placement</span>
+              <select className="hexa-input" value={form.placement} onChange={(e) => setForm({ ...form, placement: e.target.value })}>
+                {['hero', 'category', 'product', 'bundle', 'offer', 'midpage'].map((x) => (
+                  <option key={x}>{x}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              <span className="hexa-label">Badge</span>
+              <input className="hexa-input" value={form.badge} onChange={(e) => setForm({ ...form, badge: e.target.value })} />
+            </label>
+            <label>
+              <span className="hexa-label">Button text</span>
+              <input className="hexa-input" value={form.buttonText} onChange={(e) => setForm({ ...form, buttonText: e.target.value })} />
+            </label>
+            <label>
+              <span className="hexa-label">Button link</span>
+              <input className="hexa-input" value={form.buttonLink} onChange={(e) => setForm({ ...form, buttonLink: e.target.value })} />
+            </label>
+            <label>
+              <span className="hexa-label">Start date (optional)</span>
+              <input type="datetime-local" className="hexa-input" value={form.startDate || ''} onChange={(e) => setForm({ ...form, startDate: e.target.value })} />
+            </label>
+            <label>
+              <span className="hexa-label">End date (optional)</span>
+              <input type="datetime-local" className="hexa-input" value={form.endDate || ''} onChange={(e) => setForm({ ...form, endDate: e.target.value })} />
+            </label>
+          </div>
+          <div className="flex items-center justify-between">
+            <label className="flex items-center gap-2 text-sm">
+              <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} />
+              Active
+            </label>
+            <input type="number" min="0" className="hexa-input !w-28" value={form.displayOrder} onChange={(e) => setForm({ ...form, displayOrder: Number(e.target.value) })} />
+          </div>
+          <div className="flex justify-end gap-3">
+            <button type="button" className="hexa-btn-secondary" onClick={() => setOpen(false)}>
+              Cancel
+            </button>
+            <button className="hexa-btn">Save banner</button>
+          </div>
+        </form>
+      </Modal>
+    </>
+  )
+}
+

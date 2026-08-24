@@ -1,20 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
+import { HugeiconsIcon } from '@hugeicons/react'
 import {
-  FaBell,
-  FaBoxes,
-  FaCloudDownloadAlt,
-  FaCommentDots,
-  FaEdit,
-  FaGift,
-  FaPercent,
-  FaPlus,
-  FaRedo,
-  FaSave,
-  FaStar,
-  FaTicketAlt,
-  FaTrash,
-  FaUserShield,
-} from 'react-icons/fa'
+  CloudDownloadIcon,
+  Comment01Icon,
+  Delete02Icon,
+  Discount01Icon,
+  Edit02Icon,
+  FloppyDiskIcon,
+  GiftIcon,
+  Notification01Icon,
+  PackageIcon,
+  PlusSignIcon,
+  RefreshIcon,
+  StarIcon,
+  Ticket01Icon,
+  UserShield01Icon,
+} from '@hugeicons/core-free-icons'
 import { adminDelete, adminGet, adminPatch, adminPost, adminPut } from '../../api/admin.api'
 import { apiErrorMessage } from '../../api/client'
 import { useToast } from '../../contexts/ToastContext'
@@ -22,17 +23,17 @@ import AdminPageHeader from '../../components/AdminPageHeader'
 import StatusBadge from '../../components/StatusBadge'
 
 const tabs = [
-  ['Coupons', 'coupons', FaPercent],
-  ['Bundles', 'bundles', FaGift],
-  ['Promotions', 'promotions', FaStar],
-  ['Support', 'support', FaTicketAlt],
-  ['Refunds', 'refunds', FaRedo],
-  ['Reviews', 'reviews', FaCommentDots],
-  ['Notifications', 'notifications', FaBell],
-  ['Abandoned carts', 'abandoned', FaBoxes],
-  ['Roles', 'roles', FaUserShield],
-  ['Settings', 'settings', FaSave],
-  ['Backup', 'backup', FaCloudDownloadAlt],
+  ['Coupons', 'coupons', Discount01Icon],
+  ['Bundles', 'bundles', GiftIcon],
+  ['Promotions', 'promotions', StarIcon],
+  ['Support', 'support', Ticket01Icon],
+  ['Refunds', 'refunds', RefreshIcon],
+  ['Reviews', 'reviews', Comment01Icon],
+  ['Notifications', 'notifications', Notification01Icon],
+  ['Abandoned carts', 'abandoned', PackageIcon],
+  ['Roles', 'roles', UserShield01Icon],
+  ['Settings', 'settings', FloppyDiskIcon],
+  ['Backup', 'backup', CloudDownloadIcon],
 ]
 
 export default function AdminGrowthFeatures() {
@@ -52,7 +53,7 @@ export default function AdminGrowthFeatures() {
               tab === key ? 'bg-[var(--hexa-accent-soft)] text-[var(--hexa-text)] ring-1 ring-inset ring-[var(--hexa-border)]' : 'hexa-btn-secondary !py-2.5'
             }`}
           >
-            <Icon />{label}
+            <HugeiconsIcon icon={Icon} size={15} />{label}
           </button>
         ))}
       </div>
@@ -210,7 +211,7 @@ function Coupons() {
           <Checkbox label="Active" checked={form.active} set={(active) => setForm({ ...form, active })} />
 
           <div className="flex gap-2">
-            <button className="hexa-btn flex-1"><FaSave />{editingId ? 'Update coupon' : 'Create coupon'}</button>
+            <button className="hexa-btn flex-1"><HugeiconsIcon icon={FloppyDiskIcon} size={15} />{editingId ? 'Update coupon' : 'Create coupon'}</button>
             {editingId && <button type="button" onClick={reset} className="hexa-btn-secondary">Cancel</button>}
           </div>
         </form>
@@ -371,22 +372,22 @@ function Bundles() {
 
   return (
     <Two wideForm>
-      <FormCard title={editingId ? 'Edit bundle' : 'Create bundle'}>
+      <FormCard title={editingId ? 'Edit bundle' : 'Create first-class bundle'}>
         <form onSubmit={save} className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input label="Bundle name" value={form.name} set={(name) => setForm({ ...form, name })} required />
-            <Input label="Code" value={form.code} set={(code) => setForm({ ...form, code: code.toUpperCase() })} />
+            <Input label="Bundle name *" value={form.name} set={(name) => setForm({ ...form, name })} required />
+            <Input label="Slug (optional)" value={form.slug} set={(slug) => setForm({ ...form, slug })} />
           </div>
-          <Input label="Short description" value={form.shortDescription} set={(shortDescription) => setForm({ ...form, shortDescription })} />
-          <TextArea label="Description" value={form.description} set={(description) => setForm({ ...form, description })} rows={3} />
+          <Input label="Subtitle / short hook" value={form.subtitle} set={(subtitle) => setForm({ ...form, subtitle })} />
+          <TextArea label="Description" value={form.description} set={(description) => setForm({ ...form, description })} />
 
-          <div className="grid grid-cols-2 gap-3">
-            <Input label="Regular price" type="number" value={form.regularPrice} set={(regularPrice) => setForm({ ...form, regularPrice: Number(regularPrice) })} required />
-            <Input label="Sale price" type="number" value={form.salePrice} set={(salePrice) => setForm({ ...form, salePrice: Number(salePrice) })} />
+          <div className="grid gap-3 sm:grid-cols-3">
+            <Input label="Bundle sale price (৳) *" type="number" value={form.price} set={(price) => setForm({ ...form, price })} required />
+            <Input label="Original / strike price (৳)" type="number" value={form.regularPrice} set={(regularPrice) => setForm({ ...form, regularPrice })} />
+            <Input label="Badge (e.g. SAVE 25%)" value={form.badge} set={(badge) => setForm({ ...form, badge })} />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Input label="Card image URL" value={form.imageUrl} set={(imageUrl) => setForm({ ...form, imageUrl })} />
+          <div className="rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-bg-soft)] p-3">
             <Input label="Banner image URL" value={form.bannerImageUrl} set={(bannerImageUrl) => setForm({ ...form, bannerImageUrl })} />
           </div>
 
@@ -396,7 +397,7 @@ function Bundles() {
                 <p className="text-sm font-semibold">Bundle components</p>
                 <p className="text-xs text-[var(--hexa-muted)]">Choose product/plan and quantity. Customers see one bundle; stock is deducted from these components.</p>
               </div>
-              <button type="button" onClick={() => setForm({ ...form, items: [...form.items, newBundleComponent()] })} className="hexa-btn-secondary !px-3 !py-2 text-xs"><FaPlus />Add</button>
+              <button type="button" onClick={() => setForm({ ...form, items: [...form.items, newBundleComponent()] })} className="hexa-btn-secondary !px-3 !py-2 text-xs"><HugeiconsIcon icon={PlusSignIcon} size={14} />Add</button>
             </div>
             <div className="space-y-2">
               {form.items.map((item, index) => {
@@ -418,7 +419,7 @@ function Bundles() {
                       {variants.map((variant) => <option key={variant._id} value={variant._id}>{variant.name}</option>)}
                     </select>
                     <input className="hexa-input" type="number" min="1" max="20" value={item.quantity} onChange={(event) => updateComponent(index, { quantity: Number(event.target.value) })} aria-label="Component quantity" />
-                    <button type="button" onClick={() => removeComponent(index)} disabled={form.items.length <= 2} className="rounded-xl text-rose-500 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-30" aria-label="Remove component"><FaTrash className="mx-auto" /></button>
+                    <button type="button" onClick={() => removeComponent(index)} disabled={form.items.length <= 2} className="rounded-xl text-rose-500 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-30" aria-label="Remove component"><HugeiconsIcon icon={Delete02Icon} size={14} className="mx-auto" /></button>
                   </div>
                 )
               })}
@@ -434,7 +435,7 @@ function Bundles() {
           <Checkbox label="Featured bundle" checked={form.featured} set={(featured) => setForm({ ...form, featured })} />
 
           <div className="flex gap-2">
-            <button className="hexa-btn flex-1"><FaSave />{editingId ? 'Update bundle' : 'Create bundle'}</button>
+            <button className="hexa-btn flex-1"><HugeiconsIcon icon={FloppyDiskIcon} size={15} />{editingId ? 'Update bundle' : 'Create bundle'}</button>
             {editingId && <button type="button" onClick={reset} className="hexa-btn-secondary">Cancel</button>}
           </div>
         </form>
@@ -621,7 +622,7 @@ function Promotions() {
           <Checkbox label="Active" checked={form.active} set={(active) => setForm({ ...form, active })} />
 
           <div className="flex gap-2">
-            <button className="hexa-btn flex-1"><FaSave />{editingId ? 'Update campaign' : 'Create campaign'}</button>
+            <button className="hexa-btn flex-1"><HugeiconsIcon icon={FloppyDiskIcon} size={15} />{editingId ? 'Update campaign' : 'Create campaign'}</button>
             {editingId && <button type="button" onClick={reset} className="hexa-btn-secondary">Cancel</button>}
           </div>
         </form>
@@ -914,7 +915,7 @@ function Settings() {
         </div>
       </FormCard>
 
-      <div className="xl:col-span-2"><button className="hexa-btn"><FaSave />Save settings</button></div>
+      <div className="xl:col-span-2"><button className="hexa-btn"><HugeiconsIcon icon={FloppyDiskIcon} size={15} />Save settings</button></div>
     </form>
   )
 }
@@ -959,16 +960,16 @@ function Backup() {
   return (
     <div className="grid max-w-4xl gap-6 md:grid-cols-2">
       <div className="hexa-card p-8">
-        <FaCloudDownloadAlt className="text-4xl text-purple-600" />
+        <HugeiconsIcon icon={CloudDownloadIcon} size={36} className="text-purple-600" />
         <h2 className="mt-5 text-2xl font-bold">Safe JSON backup/export</h2>
         <p className="mt-3 text-sm leading-6 text-[var(--hexa-muted)]">Exports catalog and configuration without passwords, refresh tokens, orders or protected delivery credentials.</p>
-        <button onClick={download} className="hexa-btn mt-6"><FaCloudDownloadAlt />Export sanitized backup</button>
+        <button onClick={download} className="hexa-btn mt-6"><HugeiconsIcon icon={CloudDownloadIcon} size={15} />Export sanitized backup</button>
       </div>
       <div className="hexa-card p-8">
-        <FaRedo className="text-4xl text-purple-600" />
+        <HugeiconsIcon icon={RefreshIcon} size={36} className="text-purple-600" />
         <h2 className="mt-5 text-2xl font-bold">Restore catalog/configuration</h2>
         <p className="mt-3 text-sm leading-6 text-[var(--hexa-muted)]">Restore a compatible HEXA sanitized backup. Keep database-native backups for complete disaster recovery.</p>
-        <label className="hexa-btn-secondary mt-6 inline-flex cursor-pointer"><FaRedo />{restoring ? 'Restoring…' : 'Choose backup JSON'}<input disabled={restoring} type="file" accept="application/json,.json" className="hidden" onChange={restore} /></label>
+        <label className="hexa-btn-secondary mt-6 inline-flex cursor-pointer"><HugeiconsIcon icon={RefreshIcon} size={15} />{restoring ? 'Restoring…' : 'Choose backup JSON'}<input disabled={restoring} type="file" accept="application/json,.json" className="hidden" onChange={restore} /></label>
       </div>
     </div>
   )
@@ -1022,8 +1023,8 @@ function CheckList({ title, rows, selected, onChange }) {
 function CrudActions({ onEdit, onDelete }) {
   return (
     <div className="flex gap-1">
-      <button onClick={onEdit} className="rounded-lg p-2 text-purple-600 transition hover:bg-purple-500/[0.08]" title="Edit"><FaEdit /></button>
-      <button onClick={onDelete} className="rounded-lg p-2 text-rose-500 transition hover:bg-rose-500/[0.08]" title="Delete"><FaTrash /></button>
+      <button onClick={onEdit} className="rounded-lg p-2 text-purple-600 transition hover:bg-purple-500/[0.08]" title="Edit"><HugeiconsIcon icon={Edit02Icon} size={16} /></button>
+      <button onClick={onDelete} className="rounded-lg p-2 text-rose-500 transition hover:bg-rose-500/[0.08]" title="Delete"><HugeiconsIcon icon={Delete02Icon} size={16} /></button>
     </div>
   )
 }

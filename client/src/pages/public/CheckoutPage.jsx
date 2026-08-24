@@ -50,6 +50,8 @@ export default function CheckoutPage() {
   const [quoteError, setQuoteError] = useState('')
   const [copiedNumber, setCopiedNumber] = useState(false)
   const [qrModalOpen, setQrModalOpen] = useState(false)
+  const [purchaseState, setPurchaseState] = useState('idle') // 'idle' | 'processing' | 'confirmed'
+  const [statusMessage, setStatusMessage] = useState('')
 
   const [form, setForm] = useState({
     name: user?.name || '',
@@ -133,9 +135,6 @@ export default function CheckoutPage() {
       notify('Could not copy automatically', 'info')
     }
   }
-
-  const [purchaseState, setPurchaseState] = useState('idle') // 'idle' | 'processing' | 'confirmed'
-  const [statusMessage, setStatusMessage] = useState('')
 
   const payableAmount = quote?.total ?? subtotal
   const isFullyPaid = payableAmount === 0
@@ -452,7 +451,7 @@ export default function CheckoutPage() {
                             .map((line) => line.trim())
                             .filter(Boolean)
                             .map((line, idx) => {
-                              const match = line.match(/^(\d+)[\.\)]\s*(.*)$/)
+                              const match = line.match(/^(\d+)[.)]\s*(.*)$/)
                               return (
                                 <div
                                   key={idx}
@@ -536,7 +535,7 @@ export default function CheckoutPage() {
                   </p>
                   {item.customerInputs && Object.keys(item.customerInputs).length > 0 && (
                     <div className="mt-1.5 flex flex-wrap gap-1">
-                      {Object.entries(item.customerInputs).filter(([_, v]) => v).map(([k, v]) => (
+                      {Object.entries(item.customerInputs).filter(([, v]) => v).map(([k, v]) => (
                         <span key={k} className="rounded bg-purple-500/10 px-1.5 py-0.5 text-[10px] font-semibold text-purple-400">
                           <span className="capitalize text-[var(--hexa-muted)]">{k.replace(/([A-Z])/g, ' $1')}:</span> {String(v)}
                         </span>

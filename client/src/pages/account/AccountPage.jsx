@@ -1,13 +1,13 @@
 import { useEffect,useState } from 'react'
 import { Link,NavLink,Route,Routes,useNavigate,useParams } from 'react-router-dom'
-import { FaBell,FaBoxOpen,FaClock,FaCoins,FaHeadset,FaKey,FaLock,FaReceipt,FaSignOutAlt,FaTicketAlt,FaUser,FaWallet } from 'react-icons/fa'
+import { FaBell,FaBoxOpen,FaClock,FaCoins,FaHeadset,FaKey,FaLock,FaReceipt,FaSignOutAlt,FaTicketAlt,FaUser } from 'react-icons/fa'
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
 import { useCurrency } from '../../contexts/CurrencyContext'
 import { getMyOrder,getMyOrders } from '../../api/order.api'
 import { changePassword } from '../../api/auth.api'
 import { apiErrorMessage } from '../../api/client'
-import { cancelOrder,createRefund,createTicket,disable2FA,enable2FA,getActivity,getInvoice,getReferral,getRefunds,getSessions,getSubscriptions,getTickets,getWallet,replyTicket,revokeSession,setAutoRenew,setup2FA } from '../../api/features.api'
+import { cancelOrder,createRefund,createTicket,getActivity,getInvoice,getReferral,getRefunds,getSessions,getSubscriptions,getTickets,getWallet,replyTicket,revokeSession,setAutoRenew } from '../../api/features.api'
 import StatusBadge from '../../components/StatusBadge'
 import EmptyState from '../../components/EmptyState'
 import DeliveryDetailsViewer from '../../components/DeliveryDetailsViewer'
@@ -20,6 +20,7 @@ function OrderDetail(){
   const{id}=useParams(),[order,setOrder]=useState(null),[loading,setLoading]=useState(true)
   const{notify}=useToast(),{format}=useCurrency()
   const load=()=>getMyOrder(id).then(setOrder).finally(()=>setLoading(false))
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(()=>{load()},[id])
   if(loading)return <Skeleton/>
   if(!order)return <EmptyState title="Order not found"/>
@@ -68,7 +69,7 @@ function OrderDetail(){
                   <p className="mt-1 text-xs text-[var(--hexa-muted)]">{item.itemType==='bundle'?'Bundle package':item.variantName||item.productType} × {item.quantity}</p>
                   {item.customerInputs && Object.keys(item.customerInputs).length > 0 && (
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      {Object.entries(item.customerInputs).filter(([_, v]) => v).map(([k, v]) => (
+                      {Object.entries(item.customerInputs).filter(([, v]) => v).map(([k, v]) => (
                         <span key={k} className="rounded-md bg-purple-500/10 px-2 py-0.5 text-[11px] font-semibold text-purple-400">
                           <span className="capitalize text-[var(--hexa-muted)]">{k.replace(/([A-Z])/g, ' $1')}:</span> {String(v)}
                         </span>

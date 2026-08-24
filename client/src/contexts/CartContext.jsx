@@ -323,6 +323,7 @@ export function CartProvider({ children }) {
     removeItem,
     clearCart,
     serverReady,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }), [items, cartCount, subtotal, serverReady])
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>

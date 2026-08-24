@@ -3,6 +3,13 @@ import mongoose from 'mongoose';
 const inventoryItemSchema = new mongoose.Schema({
   product: { type: mongoose.Schema.Types.ObjectId, ref: 'Product', required: true, index: true },
   variantId: { type: mongoose.Schema.Types.ObjectId, default: null, index: true },
+  itemType: {
+    type: String,
+    enum: ['license_key', 'account_credentials', 'custom'],
+    default: 'license_key',
+    index: true,
+  },
+  batchId: { type: String, default: '', index: true },
   encryptedPayload: { type: String, required: true, select: false },
   previewLabel: { type: String, default: '' },
   status: { type: String, enum: ['available', 'reserved', 'assigned', 'disabled'], default: 'available', index: true },
@@ -14,5 +21,6 @@ const inventoryItemSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 inventoryItemSchema.index({ product: 1, variantId: 1, status: 1 });
+inventoryItemSchema.index({ product: 1, variantId: 1, itemType: 1, status: 1 });
 
 export default mongoose.model('InventoryItem', inventoryItemSchema);

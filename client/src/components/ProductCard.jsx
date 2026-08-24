@@ -11,7 +11,6 @@ import {
 } from '@hugeicons/core-free-icons'
 
 import { useCart } from '../contexts/CartContext'
-import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../contexts/ToastContext'
 import { useCurrency } from '../contexts/CurrencyContext'
 import { useWishlist } from '../contexts/WishlistContext'
@@ -78,7 +77,6 @@ export default function ProductCard({
   product,
 }) {
   const { addItem } = useCart()
-  const { user } = useAuth()
   const { notify } = useToast()
   const { format } =
     useCurrency()

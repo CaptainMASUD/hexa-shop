@@ -1,4 +1,5 @@
-import { FaTimes } from 'react-icons/fa'
+import { HugeiconsIcon } from '@hugeicons/react'
+import { Cancel01Icon } from '@hugeicons/core-free-icons'
 
 export default function Modal({ open, onClose, title, children, maxWidth = 'max-w-2xl' }) {
   if (!open) return null
@@ -19,7 +20,7 @@ export default function Modal({ open, onClose, title, children, maxWidth = 'max-
             className="rounded-lg p-2 text-[var(--hexa-muted)] transition hover:bg-[var(--hexa-accent-soft)] hover:text-[var(--hexa-text)]"
             aria-label="Close modal"
           >
-            <FaTimes />
+            <HugeiconsIcon icon={Cancel01Icon} size={18} />
           </button>
         </div>
         <div className="p-6">{children}</div>

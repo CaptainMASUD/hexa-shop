@@ -42,11 +42,21 @@ export const categorySchema = z.object({
 const customField = z.object({
   name: z.string().trim().min(1).max(80),
   label: z.string().trim().min(1).max(100),
-  type: z.enum(['text', 'number', 'select']).optional().default('text'),
+  type: z.enum(['text', 'number', 'email', 'phone', 'textarea', 'select', 'radio', 'checkbox', 'toggle', 'date']).optional().default('text'),
   placeholder: z.string().trim().max(160).optional().default(''),
   helpText: z.string().trim().max(300).optional().default(''),
   required: z.coerce.boolean().optional().default(true),
+  defaultValue: z.any().optional().default(''),
   options: z.array(z.string().trim().max(100)).optional().default([]),
+  validation: z.object({
+    minLength: z.coerce.number().min(0).optional(),
+    maxLength: z.coerce.number().min(0).optional(),
+    min: z.coerce.number().optional(),
+    max: z.coerce.number().optional(),
+    regex: z.string().max(300).optional().default(''),
+    customErrorMessage: z.string().max(200).optional().default(''),
+  }).optional().default({}),
+  sortOrder: z.coerce.number().int().min(0).max(9999).optional().default(0),
 });
 
 const variant = z.object({
@@ -54,12 +64,17 @@ const variant = z.object({
   _id: objectId.optional(),
   name: z.string().trim().min(1).max(100),
   duration: z.string().max(80).optional().default(''),
+  sku: z.string().trim().max(80).optional().default(''),
+  region: z.string().trim().max(80).optional().default(''),
+  platform: z.string().trim().max(80).optional().default(''),
   regularPrice: z.coerce.number().min(0),
   salePrice: z.coerce.number().min(0).optional().default(0),
+  costPrice: z.coerce.number().min(0).optional().default(0),
   stock: z.coerce.number().int().min(0).optional().default(0),
+  unlimitedStock: z.coerce.boolean().optional().default(false),
   reservedQuantity: z.coerce.number().int().min(0).optional().default(0),
   soldQuantity: z.coerce.number().int().min(0).optional().default(0),
-  sku: z.string().trim().max(80).optional().default(''),
+  sortOrder: z.coerce.number().int().min(0).max(9999).optional().default(0),
   active: z.coerce.boolean().optional().default(true),
   metadata: z.record(z.any()).optional().default({}),
 });
@@ -67,6 +82,7 @@ const variant = z.object({
 export const productSchema = z.object({
   name: z.string().trim().min(2).max(160),
   slug: z.string().trim().max(180).optional().default(''),
+  brand: z.string().trim().max(100).optional().default(''),
   shortDescription: z.string().max(300).optional().default(''),
   description: z.string().max(6000).optional().default(''),
   category: objectId,
@@ -75,6 +91,7 @@ export const productSchema = z.object({
   salePrice: z.coerce.number().min(0).optional().default(0),
   currency: z.string().min(3).max(5).optional().default('BDT'),
   stock: z.coerce.number().int().min(0).optional().default(0),
+  allowUnlimitedStock: z.coerce.boolean().optional().default(false),
   lowStockThreshold: z.coerce.number().int().min(0).optional().default(5),
   thumbnail: image.optional(),
   galleryImages: z.array(image).max(8).optional().default([]),
@@ -83,20 +100,47 @@ export const productSchema = z.object({
   featured: z.coerce.boolean().optional().default(false),
   popular: z.coerce.boolean().optional().default(false),
   newArrival: z.coerce.boolean().optional().default(false),
+  sortOrder: z.coerce.number().int().min(0).max(9999).optional().default(0),
   status: z.enum(['active', 'inactive', 'archived']).optional().default('active'),
   deliveryType: z.enum(['manual', 'instant', 'scheduled']).optional().default('manual'),
-  productType: z.enum(['subscription', 'game', 'tool', 'software', 'digital-product', 'account', 'license', 'other']).optional().default('digital-product'),
+  fulfillmentType: z.enum(['manual', 'license_key', 'account_credentials', 'api_topup', 'email_delivery', 'auto_delivery', 'custom']).optional().default('manual'),
+  fulfillmentConfig: z.object({
+    provider: z.string().trim().max(100).optional().default(''),
+    serviceCode: z.string().trim().max(100).optional().default(''),
+    autoDeliverKey: z.coerce.boolean().optional().default(false),
+    customInstructions: z.string().max(2000).optional().default(''),
+    extra: z.record(z.any()).optional().default({}),
+  }).optional().default({}),
+  productType: z.enum([
+    'subscription',
+    'game',
+    'game_topup',
+    'game_license',
+    'software',
+    'software_license',
+    'gift_card',
+    'account',
+    'digital_account',
+    'license',
+    'digital-product',
+    'tool',
+    'other',
+  ]).optional().default('digital-product'),
   tags: z.array(z.string().trim().max(50)).max(30).optional().default([]),
   searchKeywords: z.array(z.string().trim().max(80)).max(30).optional().default([]),
   details: z.record(z.any()).optional().default({}),
-  customFields: z.array(customField).max(15).optional().default([]),
-  variants: z.array(variant).max(30).optional().default([]),
+  customFields: z.array(customField).max(50).optional().default([]),
+  variants: z.array(variant).max(100).optional().default([]),
 });
 
 export const productQuerySchema = z.object({
   q: z.string().trim().max(100).optional(),
   category: z.string().trim().max(120).optional(),
   type: z.string().trim().max(50).optional(),
+  productType: z.string().trim().max(50).optional(),
+  brand: z.string().trim().max(100).optional(),
+  region: z.string().trim().max(80).optional(),
+  platform: z.string().trim().max(80).optional(),
   availability: z.enum(['in_stock', 'out_of_stock', 'all']).optional(),
   featured: z.enum(['true', 'false']).optional(),
   popular: z.enum(['true', 'false']).optional(),
@@ -294,9 +338,22 @@ export const bannerSchema = z.object({
 });
 
 export const inventoryItemSchema = z.object({
-  productId: objectId, variantId: objectId.nullable().optional(), previewLabel: z.string().max(120).optional().default(''),
+  productId: objectId,
+  variantId: objectId.nullable().optional(),
+  itemType: z.enum(['license_key', 'account_credentials', 'custom']).optional().default('license_key'),
+  previewLabel: z.string().max(120).optional().default(''),
   expiresAt: z.string().datetime().nullable().optional(),
-  payload: z.record(z.union([z.string(), z.number(), z.boolean(), z.null()])).refine((value) => Object.keys(value).length > 0, 'Credential payload is required'),
+  payload: z.record(z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(z.any()), z.record(z.any())])).refine((value) => Object.keys(value).length > 0, 'Credential payload is required'),
+});
+
+export const bulkInventoryItemSchema = z.object({
+  productId: objectId,
+  variantId: objectId.nullable().optional(),
+  itemType: z.enum(['license_key', 'account_credentials', 'custom']).optional().default('license_key'),
+  lines: z.array(z.string().trim().min(1)).min(1).max(500),
+  previewPrefix: z.string().max(80).optional().default(''),
+  expiresAt: z.string().datetime().nullable().optional(),
+  instructions: z.string().max(2000).optional().default(''),
 });
 
 export const deliverySchema = z.object({
@@ -304,6 +361,7 @@ export const deliverySchema = z.object({
   inventoryItemId: objectId.nullable().optional(),
   inventoryItemIds: z.array(objectId).max(100).optional().default([]),
   summary: z.string().max(180).optional().default('Digital delivery'),
+  markDelivered: z.coerce.boolean().optional().default(false),
   details: z.record(z.union([z.string(), z.number(), z.boolean(), z.null(), z.array(z.any()), z.record(z.any())])).optional(),
 }).refine((value) => value.inventoryItemId || value.inventoryItemIds.length || (value.details && Object.keys(value.details).length), { message: 'Provide inventory item(s) or delivery details' });
 
