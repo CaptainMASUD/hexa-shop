@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 
 import {
   Link,
@@ -9,9 +9,11 @@ import {
 import { HugeiconsIcon } from '@hugeicons/react'
 
 import {
+  Alert02Icon,
   ArrowRight01Icon,
   LockPasswordIcon,
   Mail01Icon,
+  Tick02Icon,
   ViewIcon,
   ViewOffSlashIcon,
 } from '@hugeicons/core-free-icons'
@@ -19,6 +21,8 @@ import {
 import { useAuth } from '../../contexts/AuthContext'
 import { useToast } from '../../contexts/ToastContext'
 import { apiErrorMessage } from '../../api/client'
+import { resendVerificationApi } from '../../api/auth.api'
+import BotShield from '../../components/BotShield'
 
 /* ========================================================================== */
 /* Login Page                                                                 */
@@ -32,12 +36,24 @@ export default function LoginPage() {
 
   const [busy, setBusy] = useState(false)
   const [showPassword, setShowPassword] = useState(false)
+  const [unverifiedEmail, setUnverifiedEmail] = useState('')
+  const [resendCooldown, setResendCooldown] = useState(0)
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendSuccess, setResendSuccess] = useState('')
 
   const { login } = useAuth()
   const { notify } = useToast()
 
   const navigate = useNavigate()
   const location = useLocation()
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [resendCooldown])
 
   const updateField = (field, value) => {
     setForm((current) => ({
@@ -46,12 +62,31 @@ export default function LoginPage() {
     }))
   }
 
+  const handleResend = async () => {
+    const targetEmail = (unverifiedEmail || form.email).trim().toLowerCase()
+    if (!targetEmail || resendCooldown > 0 || resendLoading) return
+    setResendLoading(true)
+    setResendSuccess('')
+    try {
+      const res = await resendVerificationApi({ email: targetEmail })
+      setResendSuccess(res.message || 'Verification link sent!')
+      notify(res.message || 'Verification link sent', 'success')
+      setResendCooldown(60)
+    } catch (err) {
+      notify(apiErrorMessage(err, 'Unable to send verification link'), 'error')
+    } finally {
+      setResendLoading(false)
+    }
+  }
+
   const submit = async (event) => {
     event.preventDefault()
 
     if (busy) return
 
     setBusy(true)
+    setUnverifiedEmail('')
+    setResendSuccess('')
 
     try {
       await login({
@@ -72,13 +107,11 @@ export default function LoginPage() {
         replace: true,
       })
     } catch (error) {
-      notify(
-        apiErrorMessage(
-          error,
-          'Unable to sign in'
-        ),
-        'error'
-      )
+      const message = apiErrorMessage(error, 'Unable to sign in')
+      if (message.toLowerCase().includes('verify your email')) {
+        setUnverifiedEmail(form.email.trim())
+      }
+      notify(message, 'error')
     } finally {
       setBusy(false)
     }
@@ -93,6 +126,42 @@ export default function LoginPage() {
         onSubmit={submit}
         className="space-y-4"
       >
+        {/* ================================================================ */}
+        {/* Unverified Email Warning & Resend Box                             */}
+        {/* ================================================================ */}
+        {unverifiedEmail && (
+          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3.5 space-y-2 text-xs text-amber-200">
+            <div className="flex items-center gap-2 font-bold text-amber-300">
+              <HugeiconsIcon icon={Alert02Icon} size={16} />
+              <span>Email Verification Required</span>
+            </div>
+            <p className="text-[11px] text-amber-200/90 leading-relaxed">
+              Your email address has not been verified yet. Please check your inbox for the activation link.
+            </p>
+            {resendSuccess ? (
+              <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 flex items-center gap-1.5">
+                <HugeiconsIcon icon={Tick02Icon} size={14} />
+                <span>{resendSuccess}</span>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={handleResend}
+                disabled={resendLoading || resendCooldown > 0}
+                className="
+                  inline-flex items-center gap-1 font-bold text-amber-300 hover:text-amber-100 underline text-xs disabled:opacity-50 disabled:cursor-not-allowed
+                "
+              >
+                {resendLoading
+                  ? 'Sending link...'
+                  : resendCooldown > 0
+                  ? `Resend available in ${resendCooldown}s`
+                  : 'Resend verification link now →'}
+              </button>
+            )}
+          </div>
+        )}
+
         {/* ================================================================ */}
         {/* Email                                                            */}
         {/* ================================================================ */}
@@ -246,6 +315,8 @@ export default function LoginPage() {
             Forgot password?
           </Link>
         </div>
+
+        <BotShield className="mt-4" />
 
         {/* ================================================================ */}
         {/* Submit                                                           */}

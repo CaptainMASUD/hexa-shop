@@ -25,10 +25,48 @@ export const adminRegisterSchema = z.object({
 export const adminLoginSchema = z.object({
   username: z.string().trim().min(2, 'Username is required').max(160),
   password: z.string().min(1, 'Password is required').max(128),
+  otp: z.string().trim().regex(/^\d{6}$/, 'Authenticator code must be 6 digits').optional().or(z.literal('')),
+});
+export const adminCreateSchema = z.object({
+  name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100),
+  username: z.string().trim().min(3, 'Username must be at least 3 characters').max(50).regex(/^[a-zA-Z0-9._-]+$/, 'Username can only contain letters, numbers, dots, dashes, and underscores').transform((v) => v.toLowerCase()),
+  email: z.string().trim().email().max(160).transform((v) => v.toLowerCase()),
+  password: strongPassword,
+  phone: z.string().trim().max(30).optional().default(''),
+  roleId: objectId.nullable().optional(),
+  permissions: z.array(z.string()).optional().default([]),
+  isActive: z.boolean().optional().default(true),
+});
+export const adminUpdateSchema = z.object({
+  name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100).optional(),
+  email: z.string().trim().email().max(160).transform((v) => v.toLowerCase()).optional(),
+  phone: z.string().trim().max(30).optional(),
+  password: strongPassword.optional().or(z.literal('')),
+  roleId: objectId.nullable().optional(),
+  permissions: z.array(z.string()).optional(),
+  isActive: z.boolean().optional(),
 });
 export const twoFactorSchema = z.object({ otp: z.string().regex(/^\d{6}$/, 'Enter a 6-digit authenticator code') });
-export const profileSchema = z.object({ name: z.string().trim().min(2).max(100), phone: z.string().trim().max(30).optional().default('') });
+export const verifyEmailSchema = z.object({ token: z.string().trim().min(1, 'Verification token is required') });
+export const resendVerificationSchema = z.object({ email });
+export const profileSchema = z.object({
+  name: z.string().trim().min(2).max(100),
+  phone: z.string().trim().max(30).optional().default(''),
+  avatar: z.object({
+    url: z.string().trim().optional().default(''),
+    publicId: z.string().trim().optional().default(''),
+  }).optional(),
+});
 export const passwordSchema = z.object({ currentPassword: z.string().min(1).max(128), newPassword: strongPassword });
+export const forgotPasswordSchema = z.object({ email });
+export const resetPasswordSchema = z.object({
+  token: z.string().trim().min(1, 'Reset token is required'),
+  password: strongPassword,
+  confirmPassword: z.string().min(1, 'Confirm password is required').optional(),
+}).refine((data) => !data.confirmPassword || data.password === data.confirmPassword, {
+  message: 'Passwords do not match',
+  path: ['confirmPassword'],
+});
 
 export const categorySchema = z.object({
   name: z.string().trim().min(2).max(80),
@@ -131,6 +169,20 @@ export const productSchema = z.object({
   details: z.record(z.any()).optional().default({}),
   customFields: z.array(customField).max(50).optional().default([]),
   variants: z.array(variant).max(100).optional().default([]),
+  faqs: z.array(z.object({
+    question: z.string().trim().min(2).max(300),
+    answer: z.string().trim().min(2).max(2000),
+  })).max(30).optional().default([]),
+  guide: z.object({
+    title: z.string().trim().max(200).optional().default(''),
+    videoUrl: z.string().trim().max(500).optional().default(''),
+    steps: z.array(z.object({
+      stepNumber: z.coerce.number().int().min(1).max(99).optional().default(1),
+      title: z.string().trim().min(1).max(160),
+      description: z.string().trim().min(1).max(1500),
+      imageUrl: z.string().trim().max(500).optional().default(''),
+    })).max(20).optional().default([]),
+  }).optional().default({ steps: [] }),
 });
 
 export const productQuerySchema = z.object({
@@ -142,6 +194,7 @@ export const productQuerySchema = z.object({
   region: z.string().trim().max(80).optional(),
   platform: z.string().trim().max(80).optional(),
   availability: z.enum(['in_stock', 'out_of_stock', 'all']).optional(),
+  status: z.enum(['active', 'inactive', 'archived', 'all']).optional(),
   featured: z.enum(['true', 'false']).optional(),
   popular: z.enum(['true', 'false']).optional(),
   minPrice: z.coerce.number().min(0).optional(),
@@ -332,7 +385,7 @@ export const bannerSchema = z.object({
   title: z.string().trim().min(2).max(140), subtitle: z.string().max(300).optional().default(''),
   image, buttonText: z.string().max(80).optional().default('Shop now'), buttonLink: z.string().max(300).optional().default('/products'),
   displayOrder: z.coerce.number().int().min(0).optional().default(0), active: z.coerce.boolean().optional().default(true),
-  badge: z.string().max(80).optional().default(''), placement: z.enum(['hero','category','product','bundle','offer','midpage']).optional().default('hero'),
+  badge: z.string().max(80).optional().default(''), placement: z.enum(['hero','home','offer','offers','category','product','bundle','midpage']).optional().default('hero'),
   targetType: z.enum(['none','category','product','bundle','url']).optional().default('none'), targetId: objectId.nullable().optional(),
   startDate: z.string().datetime().nullable().optional(), endDate: z.string().datetime().nullable().optional(),
 });
@@ -368,3 +421,56 @@ export const deliverySchema = z.object({
 export const orderStatusSchema = z.object({ status: z.enum(['confirmed', 'processing', 'delivered', 'rejected', 'cancelled', 'refunded']), note: z.string().max(500).optional().default('') });
 export const paymentStatusSchema = z.object({ status: z.enum(['verified', 'rejected', 'refunded']), note: z.string().max(500).optional().default('') });
 export const internalNoteSchema = z.object({ note: z.string().max(3000) });
+
+export const restockAlertSchema = z.object({
+  email: z.string().trim().email().max(160).transform((v) => v.toLowerCase()),
+  variantId: objectId.nullable().optional(),
+});
+
+export const affiliatePayoutSchema = z.object({
+  amount: z.coerce.number().min(10, 'Minimum payout amount is 10'),
+  paymentMethod: z.enum(['bkash', 'nagad', 'rocket', 'bank', 'crypto']),
+  accountNumber: z.string().trim().min(3, 'Account number is required').max(80),
+  accountType: z.enum(['personal', 'agent', 'merchant', 'savings']).optional().default('personal'),
+});
+
+export const adminAffiliatePayoutSchema = z.object({
+  status: z.enum(['pending', 'processing', 'approved', 'rejected']),
+  adminNote: z.string().trim().max(500).optional().default(''),
+  transactionReference: z.string().trim().max(100).optional().default(''),
+});
+
+export const fraudBlockSchema = z.object({
+  type: z.enum(['ip', 'phone', 'email', 'account']),
+  value: z.string().trim().min(2).max(160),
+  reason: z.string().trim().min(2).max(300).optional().default('Fraud prevention / security restriction'),
+  expiresAt: z.string().datetime().nullable().optional(),
+});
+
+export const walletCreditPackageSchema = z.object({
+  name: z.string().trim().min(2, 'Name must be at least 2 characters').max(100),
+  payAmount: z.coerce.number().min(1, 'Pay amount must be at least 1'),
+  creditAmount: z.coerce.number().min(1, 'Credit amount must be at least 1'),
+  bonusCredits: z.coerce.number().min(0).optional().default(0),
+  badge: z.string().trim().max(50).optional().default(''),
+  description: z.string().trim().max(500).optional().default(''),
+  isActive: z.coerce.boolean().optional().default(true),
+  sortOrder: z.coerce.number().int().optional().default(0),
+});
+
+export const walletCreditPurchaseCreateSchema = z.object({
+  packageId: objectId,
+  paymentMethodId: objectId,
+  senderNumber: z.string().trim().max(60).optional().default(''),
+  transactionId: z.string().trim().max(100).optional().default(''),
+  customerNote: z.string().trim().max(500).optional().default(''),
+});
+
+export const adminApproveCreditPurchaseSchema = z.object({
+  adminNote: z.string().trim().max(500).optional().default(''),
+});
+
+export const adminRejectCreditPurchaseSchema = z.object({
+  rejectionReason: z.string().trim().min(2, 'Rejection reason is required').max(500),
+});
+

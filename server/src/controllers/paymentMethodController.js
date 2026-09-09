@@ -5,15 +5,30 @@ import { success } from '../utils/response.js';
 import { toSlug } from '../utils/slug.js';
 import { destroyImage } from '../services/cloudinaryService.js';
 import { writeAudit } from '../services/auditService.js';
+import { paginateWithCursor } from '../utils/cursorPagination.js';
 
 export const listPaymentMethods = asyncHandler(async (_req, res) => {
   const data = await PaymentMethod.find({ active: true }).sort({ displayOrder: 1, name: 1 }).lean();
   return success(res, { data });
 });
 
-export const listAdminPaymentMethods = asyncHandler(async (_req, res) => {
-  const data = await PaymentMethod.find().sort({ displayOrder: 1, name: 1 }).lean();
-  return success(res, { data });
+export const listAdminPaymentMethods = asyncHandler(async (req, res) => {
+  const filter = {};
+  if (req.query.q && req.query.q.trim()) {
+    const regex = new RegExp(req.query.q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    filter.$or = [{ name: regex }, { slug: regex }, { accountType: regex }];
+  }
+  if (req.query.active === 'true') filter.active = true;
+  if (req.query.active === 'false') filter.active = false;
+
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
+  const result = await paginateWithCursor(PaymentMethod, filter, {
+    limit,
+    cursor: req.query.cursor,
+    direction: req.query.direction,
+    includeTotal: true,
+  });
+  return success(res, result);
 });
 
 export const createPaymentMethod = asyncHandler(async (req, res) => {

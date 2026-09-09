@@ -7,18 +7,26 @@ import asyncHandler from '../utils/asyncHandler.js';
 import { success } from '../utils/response.js';
 import { encryptJson } from '../utils/encryption.js';
 import { writeAudit } from '../services/auditService.js';
+import { checkAndTriggerRestockAlerts } from '../services/restockService.js';
+import { paginateWithCursor } from '../utils/cursorPagination.js';
 
 export const listInventoryItems = asyncHandler(async (req, res) => {
   const filter = {};
   if (req.query.productId && mongoose.isValidObjectId(req.query.productId)) filter.product = req.query.productId;
-  if (req.query.status) filter.status = req.query.status;
-  const data = await InventoryItem.find(filter)
-    .select('-encryptedPayload')
-    .populate('product', 'name slug thumbnail')
-    .sort({ createdAt: -1 })
-    .limit(200)
-    .lean();
-  return success(res, { data });
+  if (req.query.status && req.query.status.trim()) filter.status = req.query.status.trim();
+  if (req.query.itemType && req.query.itemType.trim()) filter.itemType = req.query.itemType.trim();
+
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
+  const result = await paginateWithCursor(InventoryItem, filter, {
+    limit,
+    cursor: req.query.cursor,
+    direction: req.query.direction,
+    select: '-encryptedPayload',
+    populate: { path: 'product', select: 'name slug thumbnail' },
+    includeTotal: true,
+  });
+
+  return success(res, result);
 });
 
 export const createInventoryItem = asyncHandler(async (req, res) => {
@@ -35,6 +43,7 @@ export const createInventoryItem = asyncHandler(async (req, res) => {
     createdBy: req.user._id,
   });
   await writeAudit(req, 'inventory_credential_created', 'InventoryItem', item._id, { productId: product._id, previewLabel: item.previewLabel });
+  checkAndTriggerRestockAlerts(product._id, req.body.variantId).catch(() => {});
   return success(res, { status: 201, message: 'Protected inventory item created', data: { ...item.toObject(), encryptedPayload: undefined } });
 });
 
@@ -88,6 +97,8 @@ export const createBulkInventoryItems = asyncHandler(async (req, res) => {
     variantId,
   });
 
+  checkAndTriggerRestockAlerts(product._id, variantId).catch(() => {});
+
   return success(res, {
     status: 201,
     message: `Successfully imported ${inserted.length} digital inventory item(s)`,
@@ -127,11 +138,24 @@ export const adjustStock = asyncHandler(async (req, res) => {
     changedBy: req.user._id,
   });
   await writeAudit(req, 'inventory_changed', 'Product', product._id, { variantId, quantity, reason: movement.reason });
+  if (quantity > 0) {
+    checkAndTriggerRestockAlerts(product._id, variantId).catch(() => {});
+  }
   return success(res, { message: 'Stock updated', data: movement });
 });
 
 export const stockHistory = asyncHandler(async (req, res) => {
   const filter = req.query.productId && mongoose.isValidObjectId(req.query.productId) ? { product: req.query.productId } : {};
-  const data = await StockMovement.find(filter).populate('product', 'name').populate('changedBy', 'name email').sort({ createdAt: -1 }).limit(300).lean();
-  return success(res, { data });
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
+  const result = await paginateWithCursor(StockMovement, filter, {
+    limit,
+    cursor: req.query.cursor,
+    direction: req.query.direction,
+    populate: [
+      { path: 'product', select: 'name thumbnail slug' },
+      { path: 'changedBy', select: 'name email' },
+    ],
+    includeTotal: true,
+  });
+  return success(res, result);
 });

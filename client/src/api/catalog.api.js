@@ -3,5 +3,6 @@ export const getCategories = () => api.get('/categories').then((r) => r.data.dat
 export const getProducts = (params = {}) => api.get('/products', { params }).then((r) => r.data)
 export const getProduct = (slug) => api.get(`/products/${slug}`).then((r) => r.data.data)
 export const getSuggestions = (q) => api.get('/products/suggestions', { params: { q } }).then((r) => r.data.data)
-export const getBanners = () => api.get('/banners').then((r) => r.data.data)
+export const getBanners = (params = {}) => api.get('/banners', { params }).then((r) => r.data.data)
 export const getPaymentMethods = () => api.get('/payment-methods').then((r) => r.data.data)
+export const subscribeRestockAlert = (productId, data) => api.post(`/products/${productId}/restock-alert`, data).then((r) => r.data)

@@ -16,6 +16,9 @@ const CheckoutPage = lazy(() => import('./pages/public/CheckoutPage'))
 const OrderSuccessPage = lazy(() => import('./pages/public/OrderSuccessPage'))
 const LoginPage = lazy(() => import('./pages/auth/LoginPage'))
 const RegisterPage = lazy(() => import('./pages/auth/RegisterPage'))
+const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage'))
+const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage'))
+const VerifyEmailPage = lazy(() => import('./pages/auth/VerifyEmailPage'))
 const AdminLoginPage = lazy(() => import('./pages/auth/AdminLoginPage'))
 const AdminRegisterPage = lazy(() => import('./pages/auth/AdminRegisterPage'))
 const AccountPage = lazy(() => import('./pages/account/AccountPage'))
@@ -27,6 +30,7 @@ const AdminInventory = lazy(() => import('./pages/admin/AdminInventory'))
 const AdminPaymentMethods = lazy(() => import('./pages/admin/AdminPaymentMethods'))
 const AdminBanners = lazy(() => import('./pages/admin/AdminBanners'))
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
+const AdminWallet = lazy(() => import('./pages/admin/AdminWallet'))
 const AdminReports = lazy(() => import('./pages/admin/AdminReports'))
 const AdminAudit = lazy(() => import('./pages/admin/AdminAudit'))
 const AdminGrowthFeatures = lazy(() => import('./pages/admin/AdminGrowthFeatures'))
@@ -46,9 +50,12 @@ export default function App() {
       <Route path="/cart" element={<CartPage />} />
       <Route path="/offers" element={<OffersPage />} />
       <Route path="/bundle/:slug" element={<BundleDetailsPage />} />
+      <Route path="/verify-email" element={<VerifyEmailPage />} />
       <Route element={<GuestRoute />}>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
       </Route>
       <Route element={<ProtectedRoute />}>
         <Route path="/checkout" element={<CheckoutPage />} />
@@ -72,6 +79,7 @@ export default function App() {
         <Route path="orders" element={<AdminOrders />} />
         <Route path="payment-methods" element={<AdminPaymentMethods />} />
         <Route path="banners" element={<AdminBanners />} />
+        <Route path="wallet" element={<AdminWallet />} />
         <Route path="users" element={<AdminUsers />} />
         <Route path="reports" element={<AdminReports />} />
         <Route path="audit" element={<AdminAudit />} />

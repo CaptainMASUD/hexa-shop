@@ -20,6 +20,7 @@ import { useCart } from '../../contexts/CartContext'
 import { useToast } from '../../contexts/ToastContext'
 import { useCurrency } from '../../contexts/CurrencyContext'
 import Modal from '../../components/Modal'
+import BotShield from '../../components/BotShield'
 
 const toApiCartItem = (item) =>
   item.itemType === 'bundle'
@@ -587,9 +588,11 @@ export default function CheckoutPage() {
             </div>
           </div>
 
+          <BotShield className="mt-4" />
+
           <button
             disabled={submitting || !methodId || Boolean(quoteError)}
-            className="hexa-btn mt-6 w-full"
+            className="hexa-btn mt-4 w-full"
           >
             <FaCheckCircle />
             {submitting ? 'Placing order…' : 'Place order'}

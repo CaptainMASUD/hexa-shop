@@ -6,6 +6,7 @@ import {
   Edit02Icon,
   GameController01Icon,
   GiftIcon,
+  HelpCircleIcon,
   Image01Icon,
   Key01Icon,
   Layers01Icon,
@@ -26,6 +27,7 @@ import StatusBadge from '../../components/StatusBadge'
 import { useToast } from '../../contexts/ToastContext'
 import DynamicFieldBuilder from '../../components/DynamicFieldBuilder'
 import VariantManager from '../../components/VariantManager'
+import AdminCursorPagination from '../../components/AdminCursorPagination'
 
 const PRODUCT_TYPES = [
   { value: 'subscription', label: 'Streaming / Subscription', icon: Tv01Icon, badge: 'Streaming' },
@@ -84,32 +86,107 @@ const blank = () => ({
   details: {},
   customFields: [],
   variants: [],
+  faqs: [],
+  guide: { title: '', videoUrl: '', steps: [] },
 })
 
 export default function AdminProducts() {
   const [items, setItems] = useState([])
   const [categories, setCategories] = useState([])
+  const [meta, setMeta] = useState({})
+  const [limit, setLimit] = useState(50)
   const [modal, setModal] = useState(false)
   const [form, setForm] = useState(blank)
   const [editing, setEditing] = useState(null)
-  const [activeTab, setActiveTab] = useState('general') // 'general' | 'variants' | 'fields' | 'fulfillment' | 'media'
+  const [activeTab, setActiveTab] = useState('general') // 'general' | 'variants' | 'fields' | 'fulfillment' | 'media' | 'guide_faqs'
   const [filterType, setFilterType] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
+  const [filterStatus, setFilterStatus] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [loading, setLoading] = useState(true)
+  const [deleteModal, setDeleteModal] = useState({
+    open: false,
+    product: null,
+    deleteMode: 'archive', // 'archive' | 'permanent'
+    loading: false,
+  })
   const { notify } = useToast()
 
-  const load = () =>
-    Promise.all([adminGet('/products', { limit: 200 }), adminGet('/categories')])
+  const load = (
+    cursor = null,
+    direction = 'next',
+    currentLimit = limit,
+    query = searchQuery,
+    cat = filterCategory,
+    type = filterType,
+    status = filterStatus
+  ) => {
+    setLoading(true)
+    const params = { limit: currentLimit }
+    if (cursor) {
+      params.cursor = cursor
+      params.direction = direction
+    }
+    if (query && query.trim()) params.q = query.trim()
+    if (cat && cat.trim()) params.category = cat.trim()
+    if (type && type.trim()) params.productType = type.trim()
+    if (status && status.trim()) params.status = status.trim()
+
+    return Promise.all([adminGet('/products', params), adminGet('/categories')])
       .then(([p, c]) => {
         setItems(p.data || [])
+        setMeta(p.meta || {})
         setCategories(c.data || [])
       })
+      .catch((error) => {
+        notify(apiErrorMessage(error, 'Unable to load products'), 'error')
+      })
       .finally(() => setLoading(false))
+  }
 
   useEffect(() => {
-    load().catch(() => {})
-  }, [])
+    load(null, 'next', limit, searchQuery, filterCategory, filterType, filterStatus).catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterCategory, filterType, filterStatus])
+
+  const handleNext = (nextCursor) => {
+    load(nextCursor, 'next', limit, searchQuery, filterCategory, filterType, filterStatus)
+  }
+
+  const handlePrev = (prevCursor) => {
+    load(prevCursor, 'prev', limit, searchQuery, filterCategory, filterType, filterStatus)
+  }
+
+  const handleLimitChange = (newLimit) => {
+    setLimit(newLimit)
+    load(null, 'next', newLimit, searchQuery, filterCategory, filterType, filterStatus)
+  }
+
+  const handleSearchSubmit = (e) => {
+    if (e) e.preventDefault()
+    load(null, 'next', limit, searchQuery, filterCategory, filterType, filterStatus)
+  }
+
+  const handleDeleteProduct = async () => {
+    if (!deleteModal.product?._id) return
+    setDeleteModal((prev) => ({ ...prev, loading: true }))
+    try {
+      const isPermanent = deleteModal.deleteMode === 'permanent'
+      const url = isPermanent
+        ? `/products/${deleteModal.product._id}?permanent=true`
+        : `/products/${deleteModal.product._id}`
+      await adminDelete(url)
+      notify(isPermanent ? 'Product permanently deleted' : 'Product archived successfully')
+      setDeleteModal({ open: false, product: null, deleteMode: 'archive', loading: false })
+      if (editing === deleteModal.product._id) {
+        setModal(false)
+      }
+      load(null, 'next', limit, searchQuery, filterCategory, filterType, filterStatus)
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
+      setDeleteModal((prev) => ({ ...prev, loading: false }))
+    }
+  }
 
   const openNew = () => {
     setEditing(null)
@@ -140,6 +217,8 @@ export default function AdminProducts() {
         searchKeywords: p.searchKeywords || [],
         details: p.details || {},
         customFields: p.customFields || [],
+        faqs: p.faqs || [],
+        guide: p.guide || { title: '', videoUrl: '', steps: [] },
         seo: p.seo || { title: '', description: '', keywords: [] },
         bannerImage: p.bannerImage,
         thumbnail: p.thumbnail,
@@ -309,6 +388,17 @@ export default function AdminProducts() {
             </option>
           ))}
         </select>
+
+        <select
+          className="hexa-input sm:w-40"
+          value={filterStatus}
+          onChange={(e) => setFilterStatus(e.target.value)}
+        >
+          <option value="">All Statuses</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+          <option value="archived">Archived</option>
+        </select>
       </div>
 
       {/* Products Table */}
@@ -396,15 +486,22 @@ export default function AdminProducts() {
                     <div className="flex gap-2">
                       <button
                         onClick={() => openEdit(p._id)}
-                        className="rounded-lg p-2 text-purple-300 transition hover:bg-purple-500/10"
+                        className="rounded-lg p-2 text-purple-300 transition hover:bg-purple-500/10 cursor-pointer"
                         title="Edit Product"
                       >
                         <HugeiconsIcon icon={Edit02Icon} size={16} />
                       </button>
                       <button
-                        onClick={() => archive(p._id)}
-                        className="rounded-lg p-2 text-rose-400 transition hover:bg-rose-500/10"
-                        title="Archive Product"
+                        onClick={() =>
+                          setDeleteModal({
+                            open: true,
+                            product: p,
+                            deleteMode: 'archive',
+                            loading: false,
+                          })
+                        }
+                        className="rounded-lg p-2 text-rose-400 transition hover:bg-rose-500/10 cursor-pointer"
+                        title="Delete or Archive Product"
                       >
                         <HugeiconsIcon icon={Delete02Icon} size={16} />
                       </button>
@@ -415,6 +512,16 @@ export default function AdminProducts() {
             })}
           </tbody>
         </table>
+
+        <AdminCursorPagination
+          meta={meta}
+          onNext={handleNext}
+          onPrev={handlePrev}
+          limit={limit}
+          onLimitChange={handleLimitChange}
+          loading={loading}
+          pageSizeOptions={[15, 30, 50, 100]}
+        />
       </div>
 
       {/* Main Product Add/Edit Modal with Tabs */}
@@ -433,6 +540,7 @@ export default function AdminProducts() {
               { id: 'fields', label: `3. Customer Fields (${form.customFields.length})`, icon: GameController01Icon },
               { id: 'fulfillment', label: '4. Fulfillment & Stock', icon: DeliveryTruck01Icon },
               { id: 'media', label: '5. Media & SEO', icon: Image01Icon },
+              { id: 'guide_faqs', label: `6. FAQs & Guide (${(form.faqs?.length || 0) + (form.guide?.steps?.length || 0)})`, icon: HelpCircleIcon },
             ].map((tab) => {
               const Icon = tab.icon
               const isActive = activeTab === tab.id
@@ -794,13 +902,253 @@ export default function AdminProducts() {
             </div>
           )}
 
+          {/* TAB 6: FAQs & Redemption Guide */}
+          {activeTab === 'guide_faqs' && (
+            <div className="space-y-6">
+              {/* Presets */}
+              <div className="rounded-xl border border-purple-500/20 bg-purple-500/[0.04] p-4">
+                <p className="text-xs font-bold text-purple-400 mb-2">⚡ Quick Templates (Click to Auto-fill FAQs & Steps):</p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm({
+                        ...form,
+                        faqs: [
+                          { question: 'How do I log in to the profile?', answer: 'Use the email and password provided in your order. Select your designated profile and enter the PIN.' },
+                          { question: 'Can I change the password or email?', answer: 'No. Changing account credentials or sharing the profile will void your subscription warranty.' },
+                        ],
+                        guide: {
+                          title: 'How to Access Your Streaming Account',
+                          videoUrl: '',
+                          steps: [
+                            { stepNumber: 1, title: 'Check Order Deliveries', description: 'Open your HEXA order details to view assigned email, password, and profile PIN.', imageUrl: '' },
+                            { stepNumber: 2, title: 'Log In on Official App / Web', description: 'Enter credentials and select only your allocated profile number/name.', imageUrl: '' },
+                            { stepNumber: 3, title: 'Enjoy Streaming', description: 'Stream smoothly across your supported TV, mobile, or browser device.', imageUrl: '' },
+                          ],
+                        },
+                      })
+                      notify('Streaming template loaded!')
+                    }}
+                    className="rounded-lg bg-purple-500/10 border border-purple-500/30 px-3 py-1.5 text-xs font-semibold text-purple-300 hover:bg-purple-500/20"
+                  >
+                    + Streaming Subscription Preset
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm({
+                        ...form,
+                        faqs: [
+                          { question: 'Where do I find my Player ID / Zone ID?', answer: 'Open the game, click on your avatar profile at the top left. Your User ID and Zone ID are displayed there.' },
+                          { question: 'How long does top-up take?', answer: 'Delivery is typically completed in 2 to 15 minutes after payment verification.' },
+                        ],
+                        guide: {
+                          title: 'How Game Direct Top-Up Works',
+                          videoUrl: '',
+                          steps: [
+                            { stepNumber: 1, title: 'Provide Player ID & Zone ID', description: 'Enter your in-game User ID and Zone ID in the required customer fields above.', imageUrl: '' },
+                            { stepNumber: 2, title: 'Complete Payment', description: 'Submit order with your transaction details.', imageUrl: '' },
+                            { stepNumber: 3, title: 'Receive Diamonds / In-game currency', description: 'Diamonds/credits are added directly to your account. Restart game if needed.', imageUrl: '' },
+                          ],
+                        },
+                      })
+                      notify('Game top-up template loaded!')
+                    }}
+                    className="rounded-lg bg-purple-500/10 border border-purple-500/30 px-3 py-1.5 text-xs font-semibold text-purple-300 hover:bg-purple-500/20"
+                  >
+                    + Game Direct Top-up Preset
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setForm({
+                        ...form,
+                        faqs: [
+                          { question: 'Is this genuine official license?', answer: 'Yes. All license keys are 100% genuine retail/commercial keys activated directly on official vendor software.' },
+                          { question: 'How many devices can I activate?', answer: 'Unless stated otherwise in the plan, each license key is valid for 1 PC/Device.' },
+                        ],
+                        guide: {
+                          title: 'How to Redeem Your Software License Key',
+                          videoUrl: '',
+                          steps: [
+                            { stepNumber: 1, title: 'Download Official Software', description: 'Download installer directly from official vendor website.', imageUrl: '' },
+                            { stepNumber: 2, title: 'Enter License Key', description: 'Navigate to Activation / License settings and paste your delivered 25-digit key.', imageUrl: '' },
+                            { stepNumber: 3, title: 'Online Activation', description: 'Click Activate. The software will verify against official servers.', imageUrl: '' },
+                          ],
+                        },
+                      })
+                      notify('License key template loaded!')
+                    }}
+                    className="rounded-lg bg-purple-500/10 border border-purple-500/30 px-3 py-1.5 text-xs font-semibold text-purple-300 hover:bg-purple-500/20"
+                  >
+                    + Software License Preset
+                  </button>
+                </div>
+              </div>
+
+              {/* FAQs Manager */}
+              <div className="rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-card)] p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-[var(--hexa-border)] pb-3">
+                  <div>
+                    <h4 className="font-bold text-sm text-[var(--hexa-text)]">Product-Specific FAQs ({form.faqs?.length || 0})</h4>
+                    <p className="text-xs text-[var(--hexa-muted)]">These appear as an accordion on the product details page.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, faqs: [...(form.faqs || []), { question: '', answer: '' }] })}
+                    className="hexa-btn-secondary !py-1.5 !px-3 text-xs"
+                  >
+                    + Add FAQ
+                  </button>
+                </div>
+
+                <div className="space-y-3">
+                  {(form.faqs || []).map((faq, idx) => (
+                    <div key={idx} className="rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-surface)]/50 p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-purple-400">FAQ #{idx + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => setForm({ ...form, faqs: form.faqs.filter((_, i) => i !== idx) })}
+                          className="text-xs text-rose-400 hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <input
+                        className="hexa-input text-xs"
+                        placeholder="Question (e.g. How to find my MLBB Zone ID?)"
+                        value={faq.question}
+                        onChange={(e) => {
+                          const updated = [...form.faqs]
+                          updated[idx] = { ...updated[idx], question: e.target.value }
+                          setForm({ ...form, faqs: updated })
+                        }}
+                      />
+                      <textarea
+                        rows={2}
+                        className="hexa-input text-xs"
+                        placeholder="Detailed answer shown when expanded..."
+                        value={faq.answer}
+                        onChange={(e) => {
+                          const updated = [...form.faqs]
+                          updated[idx] = { ...updated[idx], answer: e.target.value }
+                          setForm({ ...form, faqs: updated })
+                        }}
+                      />
+                    </div>
+                  ))}
+                  {(!form.faqs || form.faqs.length === 0) && (
+                    <p className="text-xs text-[var(--hexa-muted)] text-center py-3">No FAQs added yet. Click "+ Add FAQ" or use a quick template above.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Step-by-Step Redemption Guide Builder */}
+              <div className="rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-card)] p-5 space-y-4">
+                <div className="flex items-center justify-between border-b border-[var(--hexa-border)] pb-3">
+                  <div>
+                    <h4 className="font-bold text-sm text-[var(--hexa-text)]">How-To-Redeem Guide & Steps ({form.guide?.steps?.length || 0})</h4>
+                    <p className="text-xs text-[var(--hexa-muted)]">Visual step-by-step instructions shown on the product page.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const currentGuide = form.guide || { title: '', videoUrl: '', steps: [] }
+                      const newSteps = [...(currentGuide.steps || []), { stepNumber: (currentGuide.steps?.length || 0) + 1, title: '', description: '', imageUrl: '' }]
+                      setForm({ ...form, guide: { ...currentGuide, steps: newSteps } })
+                    }}
+                    className="hexa-btn-secondary !py-1.5 !px-3 text-xs"
+                  >
+                    + Add Step
+                  </button>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <Field label="Guide Main Title">
+                    <input
+                      className="hexa-input text-xs"
+                      placeholder="e.g. How to activate and use this product"
+                      value={form.guide?.title || ''}
+                      onChange={(e) => setForm({ ...form, guide: { ...(form.guide || {}), title: e.target.value } })}
+                    />
+                  </Field>
+                  <Field label="Video Tutorial URL (YouTube/Vimeo, optional)">
+                    <input
+                      className="hexa-input text-xs"
+                      placeholder="https://www.youtube.com/watch?v=..."
+                      value={form.guide?.videoUrl || ''}
+                      onChange={(e) => setForm({ ...form, guide: { ...(form.guide || {}), videoUrl: e.target.value } })}
+                    />
+                  </Field>
+                </div>
+
+                <div className="space-y-3">
+                  {(form.guide?.steps || []).map((step, idx) => (
+                    <div key={idx} className="rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-surface)]/50 p-4 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-purple-400">Step {idx + 1}</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const updatedSteps = form.guide.steps.filter((_, i) => i !== idx)
+                            setForm({ ...form, guide: { ...form.guide, steps: updatedSteps } })
+                          }}
+                          className="text-xs text-rose-400 hover:underline"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <input
+                          className="hexa-input text-xs"
+                          placeholder="Step title (e.g. Open Profile Page)"
+                          value={step.title}
+                          onChange={(e) => {
+                            const steps = [...form.guide.steps]
+                            steps[idx] = { ...steps[idx], title: e.target.value }
+                            setForm({ ...form, guide: { ...form.guide, steps } })
+                          }}
+                        />
+                        <input
+                          className="hexa-input text-xs"
+                          placeholder="Step screenshot/diagram image URL (optional)"
+                          value={step.imageUrl || ''}
+                          onChange={(e) => {
+                            const steps = [...form.guide.steps]
+                            steps[idx] = { ...steps[idx], imageUrl: e.target.value }
+                            setForm({ ...form, guide: { ...form.guide, steps } })
+                          }}
+                        />
+                      </div>
+                      <textarea
+                        rows={2}
+                        className="hexa-input text-xs"
+                        placeholder="Detailed instructions for this step..."
+                        value={step.description}
+                        onChange={(e) => {
+                          const steps = [...form.guide.steps]
+                          steps[idx] = { ...steps[idx], description: e.target.value }
+                          setForm({ ...form, guide: { ...form.guide, steps } })
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* Modal Footer Controls */}
           <div className="flex items-center justify-between border-t border-[var(--hexa-border)] pt-4">
             <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
-                  const tabs = ['general', 'variants', 'fields', 'fulfillment', 'media']
+                  const tabs = ['general', 'variants', 'fields', 'fulfillment', 'media', 'guide_faqs']
                   const idx = tabs.indexOf(activeTab)
                   if (idx > 0) setActiveTab(tabs[idx - 1])
                 }}
@@ -813,11 +1161,11 @@ export default function AdminProducts() {
               <button
                 type="button"
                 onClick={() => {
-                  const tabs = ['general', 'variants', 'fields', 'fulfillment', 'media']
+                  const tabs = ['general', 'variants', 'fields', 'fulfillment', 'media', 'guide_faqs']
                   const idx = tabs.indexOf(activeTab)
                   if (idx < tabs.length - 1) setActiveTab(tabs[idx + 1])
                 }}
-                disabled={activeTab === 'media'}
+                disabled={activeTab === 'guide_faqs'}
                 className="hexa-btn-secondary !px-3 !py-2 text-xs disabled:opacity-40"
               >
                 Next Step &rarr;
@@ -825,6 +1173,23 @@ export default function AdminProducts() {
             </div>
 
             <div className="flex items-center gap-3">
+              {editing && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDeleteModal({
+                      open: true,
+                      product: { _id: editing, name: form.name, thumbnail: form.thumbnail, slug: form.slug },
+                      deleteMode: 'archive',
+                      loading: false,
+                    })
+                  }}
+                  className="hexa-btn-secondary !border-rose-500/30 !bg-rose-500/10 !text-rose-400 hover:!bg-rose-500/20 mr-auto"
+                >
+                  <HugeiconsIcon icon={Delete02Icon} size={15} />
+                  <span>Delete Product</span>
+                </button>
+              )}
               <button type="button" onClick={() => setModal(false)} className="hexa-btn-secondary">
                 Cancel
               </button>
@@ -834,6 +1199,117 @@ export default function AdminProducts() {
             </div>
           </div>
         </form>
+      </Modal>
+
+      {/* Delete & Archive Confirmation Modal */}
+      <Modal
+        open={deleteModal.open}
+        onClose={() => !deleteModal.loading && setDeleteModal({ open: false, product: null, deleteMode: 'archive', loading: false })}
+        title="Delete or Archive Product"
+      >
+        <div className="space-y-4">
+          <div className="flex items-center gap-3 rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-surface)]/60 p-3">
+            {deleteModal.product?.thumbnail?.url ? (
+              <img
+                src={deleteModal.product.thumbnail.url}
+                alt=""
+                className="h-12 w-12 rounded-lg object-cover border border-[var(--hexa-border)]"
+              />
+            ) : (
+              <div className="h-12 w-12 rounded-lg bg-purple-500/10 flex items-center justify-center text-purple-400 font-bold">
+                HEXA
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <h4 className="font-bold text-sm text-[var(--hexa-text)] truncate">
+                {deleteModal.product?.name}
+              </h4>
+              <p className="text-xs text-[var(--hexa-muted)]">
+                /{deleteModal.product?.slug || deleteModal.product?._id}
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <label
+              onClick={() => setDeleteModal((prev) => ({ ...prev, deleteMode: 'archive' }))}
+              className={`flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer transition ${
+                deleteModal.deleteMode === 'archive'
+                  ? 'border-purple-500 bg-purple-500/10'
+                  : 'border-[var(--hexa-border)] bg-[var(--hexa-card)] hover:border-purple-500/30'
+              }`}
+            >
+              <input
+                type="radio"
+                name="deleteOption"
+                checked={deleteModal.deleteMode === 'archive'}
+                onChange={() => setDeleteModal((prev) => ({ ...prev, deleteMode: 'archive' }))}
+                className="mt-0.5 text-purple-600 focus:ring-purple-500"
+              />
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-xs text-[var(--hexa-text)]">Archive Product (Safe / Soft Delete)</span>
+                  <span className="rounded-md bg-purple-100 dark:bg-purple-900/40 text-purple-700 dark:text-purple-300 text-[10px] font-extrabold px-1.5 py-0.5">
+                    Recommended
+                  </span>
+                </div>
+                <p className="mt-0.5 text-xs text-[var(--hexa-muted)]">
+                  Hides the product from the customer store and disables future orders, while keeping existing orders, customer receipts, and subscription records completely intact.
+                </p>
+              </div>
+            </label>
+
+            <label
+              onClick={() => setDeleteModal((prev) => ({ ...prev, deleteMode: 'permanent' }))}
+              className={`flex items-start gap-3 rounded-xl border p-3.5 cursor-pointer transition ${
+                deleteModal.deleteMode === 'permanent'
+                  ? 'border-rose-500 bg-rose-500/10'
+                  : 'border-[var(--hexa-border)] bg-[var(--hexa-card)] hover:border-rose-500/30'
+              }`}
+            >
+              <input
+                type="radio"
+                name="deleteOption"
+                checked={deleteModal.deleteMode === 'permanent'}
+                onChange={() => setDeleteModal((prev) => ({ ...prev, deleteMode: 'permanent' }))}
+                className="mt-0.5 text-rose-600 focus:ring-rose-500"
+              />
+              <div>
+                <span className="font-bold text-xs text-rose-400">Permanently Delete</span>
+                <p className="mt-0.5 text-xs text-[var(--hexa-muted)]">
+                  Completely removes this product, variants, and uploaded Cloudinary images from the database. (Cannot be undone).
+                </p>
+              </div>
+            </label>
+          </div>
+
+          <div className="flex items-center justify-end gap-3 border-t border-[var(--hexa-border)] pt-4">
+            <button
+              type="button"
+              disabled={deleteModal.loading}
+              onClick={() => setDeleteModal({ open: false, product: null, deleteMode: 'archive', loading: false })}
+              className="hexa-btn-secondary cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={deleteModal.loading}
+              onClick={handleDeleteProduct}
+              className={
+                deleteModal.deleteMode === 'permanent'
+                  ? 'hexa-btn !bg-rose-600 hover:!bg-rose-500 disabled:opacity-50 cursor-pointer'
+                  : 'hexa-btn disabled:opacity-50 cursor-pointer'
+              }
+            >
+              {deleteModal.loading
+                ? 'Processing...'
+                : deleteModal.deleteMode === 'permanent'
+                ? 'Permanently Delete Product'
+                : 'Archive Product'}
+            </button>
+          </div>
+        </div>
       </Modal>
     </>
   )

@@ -1,6 +1,9 @@
 import mongoose from 'mongoose';
 import Product from '../models/Product.js';
 import Category from '../models/Category.js';
+import Order from '../models/Order.js';
+import ProductInteraction from '../models/ProductInteraction.js';
+import RestockAlert from '../models/RestockAlert.js';
 import StockMovement from '../models/StockMovement.js';
 import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
@@ -8,9 +11,14 @@ import { success } from '../utils/response.js';
 import { toSlug } from '../utils/slug.js';
 import { destroyImage } from '../services/cloudinaryService.js';
 import { writeAudit } from '../services/auditService.js';
+import { subscribeRestockAlert, checkAndTriggerRestockAlerts } from '../services/restockService.js';
+import { paginateWithCursor } from '../utils/cursorPagination.js';
 
 const buildProductQuery = async (query, adminMode = false) => {
   const filter = adminMode ? {} : { status: 'active' };
+  if (adminMode && query.status && query.status !== 'all') {
+    filter.status = query.status;
+  }
   if (query.q) filter.$text = { $search: query.q };
   if (query.category) {
     const category = mongoose.isValidObjectId(query.category)
@@ -105,39 +113,56 @@ const addStockStatus = (product) => {
 };
 
 const list = (adminMode = false) => asyncHandler(async (req, res) => {
-  const { page, limit, sort, minPrice, maxPrice } = req.query;
+  const { page, limit: limitParam, sort, minPrice, maxPrice, cursor, direction } = req.query;
   const filter = await buildProductQuery(req.query, adminMode);
+  const limit = Math.min(100, Math.max(1, Number(limitParam || 20)));
   const needsComputedPrice = minPrice !== undefined || maxPrice !== undefined || sort === 'price_asc' || sort === 'price_desc';
 
   if (needsComputedPrice) {
     const priceMatch = {};
     if (minPrice !== undefined) priceMatch.$gte = Number(minPrice);
     if (maxPrice !== undefined) priceMatch.$lte = Number(maxPrice);
+    const currentPage = Math.max(1, Number(page || 1));
     const pipeline = [
       { $match: filter },
       { $addFields: { _effectivePrice: effectivePriceExpression } },
       ...(Object.keys(priceMatch).length ? [{ $match: { _effectivePrice: priceMatch } }] : []),
       { $sort: sort === 'price_asc' ? { _effectivePrice: 1, createdAt: -1 } : sort === 'price_desc' ? { _effectivePrice: -1, createdAt: -1 } : (sortMap[sort] || sortMap.newest) },
-      { $facet: { data: [{ $skip: (page - 1) * limit }, { $limit: limit }], meta: [{ $count: 'total' }] } },
+      { $facet: { data: [{ $skip: (currentPage - 1) * limit }, { $limit: limit }], meta: [{ $count: 'total' }] } },
     ];
     const [result] = await Product.aggregate(pipeline);
     const data = result?.data || [];
     await Product.populate(data, { path: 'category', select: 'name slug image' });
     data.forEach((product) => { delete product._effectivePrice; addStockStatus(product); });
     const total = result?.meta?.[0]?.total || 0;
-    return success(res, { data, meta: { page, limit, total, pages: Math.ceil(total / limit) } });
+    return success(res, { data, meta: { page: currentPage, limit, total, pages: Math.ceil(total / limit) } });
   }
 
+  if (cursor || adminMode || !page) {
+    const result = await paginateWithCursor(Product, filter, {
+      limit,
+      cursor,
+      direction,
+      populate: { path: 'category', select: 'name slug image' },
+      virtuals: true,
+      includeTotal: true,
+    });
+    result.data.forEach(addStockStatus);
+    return success(res, result);
+  }
+
+  const currentPage = Math.max(1, Number(page || 1));
   const [data, total] = await Promise.all([
     Product.find(filter)
       .populate('category', 'name slug image')
       .sort(sortMap[sort] || sortMap.newest)
-      .skip((page - 1) * limit)
+      .skip((currentPage - 1) * limit)
       .limit(limit)
       .lean({ virtuals: true }),
     Product.countDocuments(filter),
   ]);
-  return success(res, { data, meta: { page, limit, total, pages: Math.ceil(total / limit) } });
+  data.forEach(addStockStatus);
+  return success(res, { data, meta: { page: currentPage, limit, total, pages: Math.ceil(total / limit) } });
 });
 
 export const listProducts = list(false);
@@ -195,7 +220,15 @@ export const updateProduct = asyncHandler(async (req, res) => {
   if (product.stock !== previousBaseStock) movements.push({ product: product._id, previousStock: previousBaseStock, quantityChanged: product.stock - previousBaseStock, newStock: product.stock, reason: 'Product stock changed from product editor', changedBy: req.user._id });
   for (const variant of product.variants) {
     const previous = previousVariantStocks.get(String(variant._id)) ?? 0;
-    if (variant.stock !== previous) movements.push({ product: product._id, variantId: variant._id, previousStock: previous, quantityChanged: variant.stock - previous, newStock: variant.stock, reason: previousVariantStocks.has(String(variant._id)) ? 'Plan stock changed from product editor' : 'Plan created with initial stock', changedBy: req.user._id });
+    if (variant.stock !== previous) {
+      movements.push({ product: product._id, variantId: variant._id, previousStock: previous, quantityChanged: variant.stock - previous, newStock: variant.stock, reason: previousVariantStocks.has(String(variant._id)) ? 'Plan stock changed from product editor' : 'Plan created with initial stock', changedBy: req.user._id });
+      if (variant.stock > previous) {
+        checkAndTriggerRestockAlerts(product._id, variant._id).catch(() => {});
+      }
+    }
+  }
+  if (product.stock > previousBaseStock) {
+    checkAndTriggerRestockAlerts(product._id).catch(() => {});
   }
   if (movements.length) await StockMovement.insertMany(movements);
   const nextImages = new Set([product.thumbnail?.publicId, ...(product.galleryImages || []).map((i) => i.publicId), product.bannerImage?.publicId].filter(Boolean));
@@ -204,11 +237,65 @@ export const updateProduct = asyncHandler(async (req, res) => {
   return success(res, { message: 'Product updated successfully', data: product });
 });
 
-export const archiveProduct = asyncHandler(async (req, res) => {
+export const deleteProduct = asyncHandler(async (req, res) => {
+  const isPermanent = req.query.permanent === 'true' || req.query.force === 'true';
   const product = await Product.findById(req.params.id);
   if (!product) throw new ApiError(404, 'Product not found');
+
+  if (isPermanent) {
+    const pendingOrders = await Order.countDocuments({
+      'items.productId': product._id,
+      status: { $in: ['pending', 'processing'] },
+    });
+    if (pendingOrders > 0) {
+      throw new ApiError(
+        400,
+        `Cannot permanently delete "${product.name}" because it is associated with ${pendingOrders} pending/processing order(s). Please fulfill or cancel these orders first, or archive the product instead.`
+      );
+    }
+
+    const imagesToClean = [
+      product.thumbnail?.publicId,
+      ...(product.galleryImages || []).map((img) => img?.publicId),
+      product.bannerImage?.publicId,
+    ].filter(Boolean);
+
+    await Promise.allSettled(imagesToClean.map(destroyImage));
+
+    await Promise.allSettled([
+      ProductInteraction.deleteMany({ product: product._id }),
+      RestockAlert.deleteMany({ product: product._id }),
+      StockMovement.deleteMany({ product: product._id }),
+    ]);
+
+    await Product.deleteOne({ _id: product._id });
+    await writeAudit(req, 'product_deleted', 'Product', product._id, { name: product.name, permanent: true });
+    return success(res, { message: 'Product permanently deleted successfully' });
+  }
+
   product.status = 'archived';
   await product.save();
   await writeAudit(req, 'product_archived', 'Product', product._id, { name: product.name });
   return success(res, { message: 'Product archived successfully' });
+});
+
+export const archiveProduct = deleteProduct;
+
+export const createRestockAlert = asyncHandler(async (req, res) => {
+  const { email, variantId } = req.body;
+  const product = await Product.findById(req.params.id);
+  if (!product) throw new ApiError(404, 'Product not found');
+
+  const alert = await subscribeRestockAlert({
+    productId: product._id,
+    variantId: variantId || null,
+    email,
+    userId: req.user?._id || null,
+  });
+
+  return success(res, {
+    status: 201,
+    message: 'We will notify you immediately once this item is back in stock!',
+    data: alert,
+  });
 });

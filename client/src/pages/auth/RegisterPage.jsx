@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useState,
 } from 'react'
@@ -20,6 +21,7 @@ import {
   Coupon01Icon,
   LockPasswordIcon,
   Mail01Icon,
+  Tick02Icon,
   UserCircleIcon,
   ViewIcon,
   ViewOffSlashIcon,
@@ -41,6 +43,9 @@ import {
   apiErrorMessage,
 } from '../../api/client'
 
+import { resendVerificationApi } from '../../api/auth.api'
+import BotShield from '../../components/BotShield'
+
 /* ========================================================================== */
 /* Register Page                                                              */
 /* ========================================================================== */
@@ -58,10 +63,24 @@ export default function RegisterPage() {
   const [formError, setFormError] = useState('')
   const [showPassword, setShowPassword] = useState(false)
 
+  const [registeredSuccess, setRegisteredSuccess] = useState(false)
+  const [registeredEmail, setRegisteredEmail] = useState('')
+  const [resendLoading, setResendLoading] = useState(false)
+  const [resendCooldown, setResendCooldown] = useState(0)
+  const [resendSuccess, setResendSuccess] = useState('')
+
   const { register } = useAuth()
   const { notify } = useToast()
 
   const navigate = useNavigate()
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0))
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [resendCooldown])
 
   /* ---------------------------------------------------------------------- */
   /* Update field                                                           */
@@ -111,6 +130,26 @@ export default function RegisterPage() {
     ).every(Boolean)
 
   /* ---------------------------------------------------------------------- */
+  /* Resend Verification Handler                                            */
+  /* ---------------------------------------------------------------------- */
+
+  const handleResendFromSuccess = async () => {
+    if (!registeredEmail || resendCooldown > 0 || resendLoading) return
+    setResendLoading(true)
+    setResendSuccess('')
+    try {
+      const res = await resendVerificationApi({ email: registeredEmail })
+      setResendSuccess(res.message || 'A new verification link has been sent to your email.')
+      notify(res.message || 'Verification link sent', 'success')
+      setResendCooldown(60)
+    } catch (err) {
+      notify(apiErrorMessage(err, 'Unable to resend verification email'), 'error')
+    } finally {
+      setResendLoading(false)
+    }
+  }
+
+  /* ---------------------------------------------------------------------- */
   /* Submit                                                                 */
   /* ---------------------------------------------------------------------- */
 
@@ -134,7 +173,7 @@ export default function RegisterPage() {
     setBusy(true)
 
     try {
-      await register({
+      const res = await register({
         name:
           form.name.trim(),
 
@@ -153,16 +192,15 @@ export default function RegisterPage() {
             .toUpperCase(),
       })
 
-      notify(
-        'Account created successfully'
-      )
-
-      navigate(
-        '/account',
-        {
-          replace: true,
-        }
-      )
+      if (res?.data?.requiresVerification) {
+        setRegisteredEmail(form.email.trim().toLowerCase())
+        setRegisteredSuccess(true)
+        setResendCooldown(60)
+        notify('Account created! Please check your email to verify.', 'success')
+      } else {
+        notify('Account created successfully')
+        navigate('/account', { replace: true })
+      }
     } catch (error) {
       const message =
         apiErrorMessage(
@@ -179,6 +217,99 @@ export default function RegisterPage() {
     } finally {
       setBusy(false)
     }
+  }
+
+  if (registeredSuccess) {
+    return (
+      <AuthShell
+        title="Check Your Inbox"
+        subtitle="We have sent a verification link to your email."
+      >
+        <div className="py-2 space-y-5 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-purple-500/10 border border-purple-500/20 text-purple-400">
+            <HugeiconsIcon icon={Mail01Icon} size={32} />
+          </div>
+
+          <div className="space-y-1.5">
+            <h2 className="text-lg font-bold text-[var(--hexa-text)]">Verify Your Email Address</h2>
+            <p className="text-xs text-[var(--hexa-muted)]">
+              We sent a verification link to <strong className="text-[var(--hexa-text)]">{registeredEmail}</strong>. Please verify your email before logging in.
+            </p>
+          </div>
+
+          <div className="rounded-xl bg-[var(--hexa-surface)] border border-[var(--hexa-border)] p-4 text-xs text-left space-y-2">
+            <p className="font-semibold text-[var(--hexa-text)] flex items-center gap-1.5">
+              <span>⏱️ Note:</span>
+            </p>
+            <p className="text-[11px] text-[var(--hexa-muted)]">
+              The verification link will expire in 30 minutes. If you don't see the email, check your spam or junk folder.
+            </p>
+
+            {resendSuccess ? (
+              <div className="mt-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 flex items-center gap-1.5">
+                <HugeiconsIcon icon={Tick02Icon} size={14} className="shrink-0" />
+                <span>{resendSuccess}</span>
+              </div>
+            ) : (
+              <div className="pt-1">
+                <button
+                  type="button"
+                  onClick={handleResendFromSuccess}
+                  disabled={resendLoading || resendCooldown > 0}
+                  className="
+                    w-full
+                    rounded-lg
+                    border
+                    border-purple-500/30
+                    bg-purple-500/10
+                    py-2
+                    text-xs
+                    font-semibold
+                    text-purple-300
+                    hover:bg-purple-500/20
+                    transition
+                    disabled:opacity-50
+                    disabled:cursor-not-allowed
+                  "
+                >
+                  {resendLoading
+                    ? 'Sending...'
+                    : resendCooldown > 0
+                    ? `Resend email in ${resendCooldown}s`
+                    : 'Resend Verification Email'}
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="pt-2">
+            <Link
+              to="/login"
+              className="
+                flex
+                w-full
+                items-center
+                justify-center
+                gap-2
+                rounded-xl
+                bg-purple-600
+                py-3
+                text-sm
+                font-bold
+                text-white
+                shadow-lg
+                shadow-purple-600/25
+                transition
+                hover:bg-purple-500
+              "
+            >
+              <span>Go to Sign In</span>
+              <HugeiconsIcon icon={ArrowRight01Icon} size={16} />
+            </Link>
+          </div>
+        </div>
+      </AuthShell>
+    )
   }
 
   return (
@@ -521,6 +652,8 @@ export default function RegisterPage() {
             }
           />
         )}
+
+        <BotShield className="mt-4" />
 
         {/* ================================================================ */}
         {/* Submit                                                           */}

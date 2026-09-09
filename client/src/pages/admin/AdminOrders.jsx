@@ -22,6 +22,7 @@ import AdminPageHeader from '../../components/AdminPageHeader'
 import Modal from '../../components/Modal'
 import StatusBadge from '../../components/StatusBadge'
 import DeliveryDetailsViewer from '../../components/DeliveryDetailsViewer'
+import AdminCursorPagination from '../../components/AdminCursorPagination'
 
 const defaultDeliveryState = {
   orderItemId: '',
@@ -189,6 +190,8 @@ function getInitialDeliveryForItem(item, existingDelivery, order) {
 
 export default function AdminOrders() {
   const [items, setItems] = useState([])
+  const [meta, setMeta] = useState({})
+  const [limit, setLimit] = useState(50)
   const [q, setQ] = useState('')
   const [status, setStatus] = useState('')
   const [paymentStatus, setPaymentStatus] = useState('')
@@ -200,15 +203,27 @@ export default function AdminOrders() {
   const [delivery, setDelivery] = useState(defaultDeliveryState)
   const { notify } = useToast()
 
-  const load = async (queryQ = q, queryStatus = status, queryPayment = paymentStatus) => {
+  const load = async (
+    cursor = null,
+    direction = 'next',
+    currentLimit = limit,
+    queryQ = q,
+    queryStatus = status,
+    queryPayment = paymentStatus
+  ) => {
     setLoading(true)
     try {
-      const params = { limit: 100 }
+      const params = { limit: currentLimit }
+      if (cursor) {
+        params.cursor = cursor
+        params.direction = direction
+      }
       if (queryQ && queryQ.trim()) params.q = queryQ.trim()
       if (queryStatus && queryStatus.trim()) params.status = queryStatus.trim()
       if (queryPayment && queryPayment.trim()) params.paymentStatus = queryPayment.trim()
       const response = await adminGet('/orders', params)
       setItems(response.data || [])
+      setMeta(response.meta || {})
     } catch (error) {
       notify(apiErrorMessage(error), 'error')
     } finally {
@@ -217,30 +232,43 @@ export default function AdminOrders() {
   }
 
   useEffect(() => {
-    load('', '', '').catch(() => {})
+    load(null, 'next', limit, '', '', '').catch(() => {})
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const handleStatusChange = (val) => {
     setStatus(val)
-    load(q, val, paymentStatus)
+    load(null, 'next', limit, q, val, paymentStatus)
   }
 
   const handlePaymentStatusChange = (val) => {
     setPaymentStatus(val)
-    load(q, status, val)
+    load(null, 'next', limit, q, status, val)
   }
 
   const resetFilters = () => {
     setQ('')
     setStatus('')
     setPaymentStatus('')
-    load('', '', '')
+    load(null, 'next', limit, '', '', '')
   }
 
   const search = (event) => {
     event.preventDefault()
-    load(q, status, paymentStatus)
+    load(null, 'next', limit, q, status, paymentStatus)
+  }
+
+  const handleNext = (nextCursor) => {
+    load(nextCursor, 'next', limit, q, status, paymentStatus)
+  }
+
+  const handlePrev = (prevCursor) => {
+    load(prevCursor, 'prev', limit, q, status, paymentStatus)
+  }
+
+  const handleLimitChange = (newLimit) => {
+    setLimit(newLimit)
+    load(null, 'next', newLimit, q, status, paymentStatus)
   }
 
   const inspect = async (id) => {
@@ -318,6 +346,22 @@ export default function AdminOrders() {
       await refreshSelected()
     } catch (error) {
       notify(apiErrorMessage(error), 'error')
+    }
+  }
+
+  const blacklistCustomer = async (type, value) => {
+    if (!value) return
+    const reason = window.prompt(`Enter reason for security blacklisting (${type}: ${value}):`, `Fraud/suspicious order ${selected?.orderNumber}`)
+    if (!reason) return
+    try {
+      await adminPost('/features/fraud-blocks', {
+        type,
+        value,
+        reason,
+      })
+      notify(`${type.toUpperCase()} (${value}) added to security blacklist!`)
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
     }
   }
 
@@ -575,13 +619,50 @@ export default function AdminOrders() {
             )}
           </tbody>
         </table>
+
+        <AdminCursorPagination
+          meta={meta}
+          onNext={handleNext}
+          onPrev={handlePrev}
+          limit={limit}
+          onLimitChange={handleLimitChange}
+          loading={loading}
+          pageSizeOptions={[15, 30, 50, 100]}
+        />
       </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title={selected?.orderNumber || 'Order'} maxWidth="max-w-6xl">
         {selected && (
           <div className="space-y-6">
             <div className="grid gap-4 sm:grid-cols-4">
-              <Info label="Customer" value={`${selected.customer.name}\n${selected.customer.email}\n${selected.customer.phone}`} />
+              <div className="rounded-xl border border-[var(--hexa-border)] p-4 text-xs">
+                <span className="font-semibold text-[var(--hexa-muted)] block mb-1.5 uppercase tracking-wider text-[10px]">Customer</span>
+                <p className="font-bold text-sm text-[var(--hexa-text)]">{selected.customer.name}</p>
+                <p className="text-[var(--hexa-muted)] mt-0.5">{selected.customer.email}</p>
+                <p className="font-mono text-purple-400 mt-0.5">{selected.customer.phone || 'No phone'}</p>
+                <div className="mt-2.5 flex flex-wrap gap-1.5 pt-2 border-t border-[var(--hexa-border)]">
+                  {selected.customer.phone && (
+                    <button
+                      type="button"
+                      onClick={() => blacklistCustomer('phone', selected.customer.phone)}
+                      className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-bold text-rose-400 hover:bg-rose-500/20 transition"
+                      title="Blacklist customer phone"
+                    >
+                      🚫 Block Phone
+                    </button>
+                  )}
+                  {selected.customer.email && (
+                    <button
+                      type="button"
+                      onClick={() => blacklistCustomer('email', selected.customer.email)}
+                      className="rounded bg-rose-500/10 px-1.5 py-0.5 text-[10px] font-bold text-rose-400 hover:bg-rose-500/20 transition"
+                      title="Blacklist customer email"
+                    >
+                      🚫 Block Email
+                    </button>
+                  )}
+                </div>
+              </div>
               <div className="rounded-xl border border-[var(--hexa-border)] p-4 text-xs">
                 <span className="font-semibold text-[var(--hexa-muted)] block mb-1.5 uppercase tracking-wider text-[10px]">Payment Details</span>
                 <p className="font-semibold text-sm text-[var(--hexa-text)]">{selected.payment.methodName}</p>

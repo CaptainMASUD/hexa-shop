@@ -7,7 +7,7 @@ const bannerSchema = new mongoose.Schema({
   buttonText: { type: String, default: 'Shop now' },
   buttonLink: { type: String, default: '/products' },
   badge: { type: String, default: '' },
-  placement: { type: String, enum: ['hero', 'category', 'product', 'bundle', 'offer', 'midpage'], default: 'hero', index: true },
+  placement: { type: String, enum: ['hero', 'home', 'offer', 'offers', 'category', 'product', 'bundle', 'midpage'], default: 'hero', index: true },
   targetType: { type: String, enum: ['none', 'category', 'product', 'bundle', 'url'], default: 'none' },
   targetId: { type: mongoose.Schema.Types.ObjectId, default: null },
   displayOrder: { type: Number, default: 0 },

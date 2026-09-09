@@ -9,6 +9,7 @@ import { prepareOrder, reserveInventory, releaseInventory, finalizeInventory, ne
 import { encryptJson, decryptJson } from '../utils/encryption.js';
 import { writeAudit } from '../services/auditService.js';
 import User from '../models/User.js';
+import ProductInteraction from '../models/ProductInteraction.js';
 import Coupon from '../models/Coupon.js';
 import CouponUsage from '../models/CouponUsage.js';
 import CouponUserUsage from '../models/CouponUserUsage.js';
@@ -18,6 +19,8 @@ import { createSubscriptionsForOrder } from '../services/subscriptionService.js'
 import { awardDeliveredOrder } from '../services/rewardService.js';
 import { notifyUser, notifyAdmins } from '../services/notificationService.js';
 import { emitWebhook } from '../services/webhookService.js';
+import { sendAdminNewOrderEmail, sendCustomerOrderConfirmationEmail, sendCustomerOrderCompletedEmail } from '../services/emailService.js';
+import { paginateWithCursor } from '../utils/cursorPagination.js';
 
 const userOrderView = async (id, userId) => {
   const order = await Order.findOne({ _id: id, user: userId }).select('+deliveries').lean();
@@ -119,6 +122,15 @@ export const createOrder = asyncHandler(async (req, res) => {
     }
 
     await Cart.findOneAndUpdate({ user: req.user._id }, { $set: { items: [], status: 'converted', lastActivityAt: new Date() } });
+
+    // Asynchronously record purchase interaction signals for recommendations
+    if (Array.isArray(prepared.items)) {
+      for (const item of prepared.items) {
+        if (item.productId) {
+          ProductInteraction.recordEvent(req.user._id, item.productId, 'purchase', { quantity: item.quantity }).catch(() => {});
+        }
+      }
+    }
   } catch (error) {
     if (order?._id) await Order.deleteOne({ _id: order._id }).catch(() => {});
     if (couponClaimed && prepared.coupon?.couponId) {
@@ -138,24 +150,30 @@ export const createOrder = asyncHandler(async (req, res) => {
   await writeAudit(req, 'order_created', 'Order', order._id, { orderNumber: order.orderNumber, total: order.total });
   emitWebhook('order.created', { orderId: order._id, orderNumber: order.orderNumber, total: order.total, userId: order.user }).catch(() => {});
   await notifyAdmins('new_order', 'New order received', `${order.orderNumber} is awaiting payment verification.`, '/admin/orders', { orderId: order._id });
+
+  // Resend email notifications (fail-safe and non-blocking)
+  sendAdminNewOrderEmail(order).catch((err) => console.error('[OrderController] Failed to dispatch admin new order email:', err?.message || err));
+  sendCustomerOrderConfirmationEmail(order).catch((err) => console.error('[OrderController] Failed to dispatch customer confirmation email:', err?.message || err));
+
   return success(res, { status: 201, message: 'Order placed and awaiting payment verification', data: order });
 });
 
 export const myOrders = asyncHandler(async (req, res) => {
-  const page = Math.max(1, Number(req.query.page || 1));
   const limit = Math.min(50, Math.max(1, Number(req.query.limit || 10)));
-  const [orders, total] = await Promise.all([
-    Order.find({ user: req.user._id }).select('-internalNotes -deliveries').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
-    Order.countDocuments({ user: req.user._id }),
-  ]);
-  return success(res, { data: orders, meta: { page, limit, total, pages: Math.ceil(total / limit) } });
+  const result = await paginateWithCursor(Order, { user: req.user._id }, {
+    limit,
+    cursor: req.query.cursor,
+    direction: req.query.direction,
+    select: '-internalNotes -deliveries',
+    includeTotal: true,
+  });
+  return success(res, result);
 });
 
 export const myOrder = asyncHandler(async (req, res) => success(res, { data: await userOrderView(req.params.id, req.user._id) }));
 
 export const adminOrders = asyncHandler(async (req, res) => {
-  const page = Math.max(1, Number(req.query.page || 1));
-  const limit = Math.min(100, Math.max(1, Number(req.query.limit || 80)));
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
   const filter = {};
   if (req.query.status && req.query.status.trim()) filter.status = req.query.status.trim();
   if (req.query.paymentStatus && req.query.paymentStatus.trim()) filter['payment.status'] = req.query.paymentStatus.trim();
@@ -172,11 +190,16 @@ export const adminOrders = asyncHandler(async (req, res) => {
       { 'items.productName': regex },
     ];
   }
-  const [orders, total] = await Promise.all([
-    Order.find(filter).populate('user', 'name email phone').sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
-    Order.countDocuments(filter),
-  ]);
-  return success(res, { data: orders, meta: { page, limit, total, pages: Math.ceil(total / limit) } });
+
+  const result = await paginateWithCursor(Order, filter, {
+    limit,
+    cursor: req.query.cursor,
+    direction: req.query.direction,
+    populate: { path: 'user', select: 'name email phone' },
+    includeTotal: true,
+  });
+
+  return success(res, result);
 });
 
 export const adminOrder = asyncHandler(async (req, res) => {
@@ -202,6 +225,7 @@ const restoreOrderBenefits = async (order) => {
 };
 
 const completeDeliveredOrder = async (order, actorId) => {
+  const previousStatus = order.status;
   if (!order.inventoryReleased && order.inventoryState !== 'finalized' && order.inventoryState !== 'released') {
     await finalizeInventory(expandOrderItemsForInventory(order.items));
     order.inventoryState = 'finalized';
@@ -212,6 +236,10 @@ const completeDeliveredOrder = async (order, actorId) => {
   await awardDeliveredOrder(order).catch(() => {});
   order.timeline.push({ event: 'Order Delivered', status: 'delivered', actor: actorId });
   await notifyUser(order.user, 'order_delivered', 'Your HEXA order is ready', `${order.orderNumber} has been delivered.`, `/account/orders/${order._id}`).catch(() => {});
+
+  if (previousStatus !== 'delivered' && previousStatus !== 'completed') {
+    sendCustomerOrderCompletedEmail(order).catch((err) => console.error('[OrderController] Failed to dispatch completed order email:', err?.message || err));
+  }
 };
 
 export const updatePaymentStatus = asyncHandler(async (req, res) => {
@@ -251,12 +279,12 @@ export const updateOrderStatus = asyncHandler(async (req, res) => {
   const status = req.body.status;
   if (order.status === status) return success(res, { message: `Order already ${status}`, data: order });
   if (['cancelled', 'rejected', 'refunded'].includes(order.status) && status !== 'refunded') throw new ApiError(409, `Cannot move a ${order.status} order to ${status}`);
-  if (status === 'delivered' && order.payment.status !== 'verified') throw new ApiError(409, 'Verify payment before marking an order delivered');
+  if (['delivered', 'completed'].includes(status) && order.payment.status !== 'verified') throw new ApiError(409, 'Verify payment before marking an order delivered/completed');
   if (['cancelled', 'rejected', 'refunded'].includes(status) && !order.inventoryReleased) {
     await releaseInventory(expandOrderItemsForInventory(order.items), req.user._id, order._id, `Order ${status}`);
     order.inventoryState = 'released'; order.inventoryReleased = true; await restoreOrderBenefits(order);
   }
-  if (status === 'delivered') {
+  if (['delivered', 'completed'].includes(status)) {
     await completeDeliveredOrder(order, req.user._id);
   } else {
     order.status = status;

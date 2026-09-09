@@ -28,8 +28,19 @@ const userSchema = new mongoose.Schema({
   referralStats: { signups: { type: Number, default: 0 }, rewardedOrders: { type: Number, default: 0 }, earned: { type: Number, default: 0 } },
   twoFactorEnabled: { type: Boolean, default: false },
   twoFactorSecret: { type: String, default: '', select: false },
+  isEmailVerified: { type: Boolean, default: false, index: true },
+  emailVerificationToken: { type: String, default: null, select: false },
+  emailVerificationExpires: { type: Date, default: null, select: false },
+  lastVerificationEmailSentAt: { type: Date, default: null },
+  passwordResetToken: { type: String, default: null, select: false },
+  passwordResetExpires: { type: Date, default: null, select: false },
+  lastPasswordResetEmailSentAt: { type: Date, default: null },
   lastLoginAt: Date,
 }, { timestamps: true });
+
+userSchema.index({ createdAt: -1, _id: -1 });
+userSchema.index({ role: 1, _id: -1 });
+userSchema.index({ isActive: 1, _id: -1 });
 
 userSchema.pre('validate', function ensureReferralCode(next) {
   if (!this.referralCode) this.referralCode = `HEXA${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
@@ -46,7 +57,7 @@ userSchema.methods.comparePassword = function comparePassword(value) { return bc
 userSchema.methods.toPublicJSON = function toPublicJSON() {
   return {
     id: this._id, name: this.name, username: this.username, email: this.email, phone: this.phone, avatar: this.avatar, role: this.role,
-    permissions: this.permissions, isActive: this.isActive, createdAt: this.createdAt, lastLoginAt: this.lastLoginAt,
+    permissions: this.permissions, isActive: this.isActive, isEmailVerified: this.isEmailVerified, createdAt: this.createdAt, lastLoginAt: this.lastLoginAt,
     walletBalance: this.walletBalance, loyaltyPoints: this.loyaltyPoints, referralCode: this.referralCode,
     referralStats: this.referralStats, twoFactorEnabled: this.twoFactorEnabled,
   };

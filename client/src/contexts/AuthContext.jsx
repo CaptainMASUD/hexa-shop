@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useState } from 'react'
-import { loginAdmin, loginUser, logoutUser, registerAdmin, registerUser, updateProfile as updateProfileApi } from '../api/auth.api'
+import { loginAdmin, loginUser, logoutUser, registerAdmin, registerUser, updateProfile as updateProfileApi, uploadAvatarApi, removeAvatarApi } from '../api/auth.api'
 import { refreshSessionApi, setAccessToken } from '../api/client'
 
 const AuthContext = createContext(null)
@@ -33,13 +33,21 @@ export function AuthProvider({ children }) {
   }, [applySession])
 
   const login = async (payload) => { const session = await loginUser(payload); applySession(session); return session }
-  const register = async (payload) => { const session = await registerUser(payload); applySession(session); return session }
+  const register = async (payload) => {
+    const res = await registerUser(payload)
+    if (res?.data?.accessToken) {
+      applySession(res.data)
+    }
+    return res
+  }
   const adminRegister = async (payload) => { const session = await registerAdmin(payload); applySession(session); return session }
   const adminLogin = async (payload) => { const session = await loginAdmin(payload); applySession(session); return session }
   const logout = async () => { try { await logoutUser() } finally { applySession(null) } }
   const updateProfile = async (payload) => { const next = await updateProfileApi(payload); setUser(next); return next }
+  const uploadAvatar = async (file) => { const next = await uploadAvatarApi(file); setUser(next); return next }
+  const removeAvatar = async () => { const next = await removeAvatarApi(); setUser(next); return next }
 
-  const value = { user, loading, isAuthenticated: Boolean(user), isAdmin: user?.role === 'admin', login, register, adminRegister, adminLogin, logout, updateProfile }
+  const value = { user, loading, isAuthenticated: Boolean(user), isAdmin: user?.role === 'admin', login, register, adminRegister, adminLogin, logout, updateProfile, uploadAvatar, removeAvatar, setUser }
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

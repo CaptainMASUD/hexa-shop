@@ -37,3 +37,12 @@ export const cancelOrder = (id) => api.patch(`/orders/${id}/cancel`).then(r=>r.d
 export const setup2FA = () => api.post('/auth/2fa/setup').then(r=>r.data.data)
 export const enable2FA = (otp) => api.post('/auth/2fa/enable',{otp}).then(r=>r.data)
 export const disable2FA = (otp) => api.post('/auth/2fa/disable',{otp}).then(r=>r.data)
+export const getAffiliatePayouts = () => api.get('/marketplace/affiliate/payouts').then(r=>r.data.data)
+export const requestAffiliatePayout = (payload) => api.post('/marketplace/affiliate/payouts',payload).then(r=>r.data)
+
+export const getWalletCreditPackages = () => api.get('/engagement/wallet/packages').then(r => r.data.data)
+export const createWalletCreditPurchase = (payload) => api.post('/engagement/wallet/purchases', payload).then(r => r.data.data)
+export const getMyWalletCreditPurchases = (params = {}) => api.get('/engagement/wallet/purchases', { params }).then(r => r.data)
+export const getMyWalletCreditPurchase = (id) => api.get(`/engagement/wallet/purchases/${id}`).then(r => r.data.data)
+export const getMyWalletTransactions = (params = {}) => api.get('/engagement/wallet/transactions', { params }).then(r => r.data)
+

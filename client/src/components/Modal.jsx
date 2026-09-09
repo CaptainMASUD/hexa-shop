@@ -1,8 +1,9 @@
 import { HugeiconsIcon } from '@hugeicons/react'
 import { Cancel01Icon } from '@hugeicons/core-free-icons'
 
-export default function Modal({ open, onClose, title, children, maxWidth = 'max-w-2xl' }) {
-  if (!open) return null
+export default function Modal({ open, isOpen, onClose, title, children, maxWidth = 'max-w-2xl' }) {
+  const isVisible = Boolean(open !== undefined ? open : isOpen)
+  if (!isVisible) return null
 
   return (
     <div

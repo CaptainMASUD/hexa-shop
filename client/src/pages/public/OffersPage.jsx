@@ -9,6 +9,7 @@ import { Link } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 
 import {
+  ArrowLeft01Icon,
   ArrowRight01Icon,
   FlashIcon,
   GiftIcon,
@@ -20,6 +21,8 @@ import {
   getBundles,
   getPromotions,
 } from '../../api/features.api'
+
+import { getBanners } from '../../api/catalog.api'
 
 import { useCurrency } from '../../contexts/CurrencyContext'
 
@@ -45,6 +48,15 @@ export default function OffersPage() {
     setPromotions,
   ] = useState([])
 
+  const [banners, setBanners] =
+    useState([])
+
+  const [activeBannerIndex, setActiveBannerIndex] =
+    useState(0)
+
+  const [isHovered, setIsHovered] =
+    useState(false)
+
   const [loading, setLoading] =
     useState(true)
 
@@ -68,11 +80,13 @@ export default function OffersPage() {
     Promise.all([
       getBundles(),
       getPromotions(),
+      getBanners({ placement: 'offer' }),
     ])
       .then(
         ([
           bundleRows,
           promotionRows,
+          bannerRows,
         ]) => {
           if (!active) {
             return
@@ -93,6 +107,14 @@ export default function OffersPage() {
               ? promotionRows
               : []
           )
+
+          setBanners(
+            Array.isArray(
+              bannerRows
+            )
+              ? bannerRows
+              : []
+          )
         }
       )
       .catch(() => {
@@ -102,6 +124,7 @@ export default function OffersPage() {
 
         setBundles([])
         setPromotions([])
+        setBanners([])
       })
       .finally(() => {
         if (active) {
@@ -115,10 +138,10 @@ export default function OffersPage() {
   }, [])
 
   /* ====================================================================== */
-  /* Hero Cover                                                             */
+  /* Hero Cover & Slider Banners                                             */
   /* ====================================================================== */
 
-  const bannerImage =
+  const promoBannerImage =
     useMemo(() => {
       const promotionWithImage =
         promotions.find(
@@ -134,8 +157,65 @@ export default function OffersPage() {
       )
     }, [promotions])
 
-  const featuredPromotion =
-    promotions[0] || null
+  const offerBanners =
+    useMemo(() => {
+      if (!banners.length) return []
+      const filtered = banners.filter(
+        (b) =>
+          b.placement === 'offer' ||
+          b.placement === 'offers'
+      )
+      return filtered.length > 0 ? filtered : banners
+    }, [banners])
+
+  const currentBanner =
+    offerBanners[activeBannerIndex] || null
+
+  const activeTitle =
+    currentBanner?.title ||
+    'Bundles & limited campaigns'
+
+  const activeSubtitle =
+    currentBanner?.subtitle ||
+    'Discover curated digital bundles and limited HEXA offers at special prices.'
+
+  const activeBadge =
+    currentBanner?.badge ||
+    'HEXA Offers'
+
+  const activeImage =
+    currentBanner?.image?.url ||
+    promoBannerImage
+
+  useEffect(() => {
+    if (activeBannerIndex >= offerBanners.length) {
+      setActiveBannerIndex(0)
+    }
+  }, [activeBannerIndex, offerBanners.length])
+
+  useEffect(() => {
+    if (offerBanners.length <= 1 || isHovered) return undefined
+
+    const interval = setInterval(() => {
+      setActiveBannerIndex((curr) => (curr + 1) % offerBanners.length)
+    }, 6000)
+
+    return () => clearInterval(interval)
+  }, [offerBanners.length, isHovered])
+
+  const handlePrevSlide = (e) => {
+    e?.stopPropagation()
+    setActiveBannerIndex((curr) =>
+      curr === 0 ? offerBanners.length - 1 : curr - 1
+    )
+  }
+
+  const handleNextSlide = (e) => {
+    e?.stopPropagation()
+    setActiveBannerIndex((curr) =>
+      (curr + 1) % offerBanners.length
+    )
+  }
 
   const totalOffers =
     bundles.length +
@@ -163,10 +243,12 @@ export default function OffersPage() {
         "
       >
         {/* ================================================================ */}
-        {/* HERO COVER                                                       */}
+        {/* HERO COVER (Dynamic Banner with Multi-Banner Slider)             */}
         {/* ================================================================ */}
 
         <section
+          onMouseEnter={() => setIsHovered(true)}
+          onMouseLeave={() => setIsHovered(false)}
           className="
             group
 
@@ -193,8 +275,9 @@ export default function OffersPage() {
           {/* ============================================================= */}
 
           <img
-            src={bannerImage}
-            alt="HEXA offers and bundles"
+            key={activeImage}
+            src={activeImage}
+            alt={activeTitle}
             className="
               absolute
               inset-0
@@ -207,7 +290,7 @@ export default function OffersPage() {
               object-cover
               object-center
 
-              transition-transform
+              transition-all
               duration-700
               ease-out
 
@@ -310,7 +393,7 @@ export default function OffersPage() {
                 strokeWidth={1.9}
               />
 
-              HEXA Offers
+              {activeBadge}
             </div>
 
             {/* Title */}
@@ -332,7 +415,7 @@ export default function OffersPage() {
                 lg:text-[48px]
               "
             >
-              Bundles & limited campaigns
+              {activeTitle}
             </h1>
 
             {/* Description */}
@@ -351,12 +434,10 @@ export default function OffersPage() {
                 sm:text-[15px]
               "
             >
-              Discover curated digital
-              bundles and limited HEXA
-              offers at special prices.
+              {activeSubtitle}
             </p>
 
-            {/* Actions */}
+            {/* Actions (Static Buttons & Status) */}
 
             <div
               className="
@@ -369,11 +450,7 @@ export default function OffersPage() {
               "
             >
               <Link
-                to={
-                  featuredPromotion
-                    ?.buttonLink ||
-                  '/products'
-                }
+                to="/products"
                 className="
                   group/button
 
@@ -459,6 +536,50 @@ export default function OffersPage() {
                 )}
             </div>
           </div>
+
+          {/* ============================================================= */}
+          {/* Multi-Banner Carousel Controls (Rendered when > 1 banner)      */}
+          {/* ============================================================= */}
+          {offerBanners.length > 1 && (
+            <div className="absolute bottom-5 right-5 z-20 flex items-center gap-2 sm:bottom-7 sm:right-8">
+              {/* Prev Button */}
+              <button
+                type="button"
+                onClick={handlePrevSlide}
+                aria-label="Previous offer banner"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/20 bg-black/40 text-white/80 backdrop-blur-md transition hover:bg-black/70 hover:text-white"
+              >
+                <UIIcon icon={ArrowLeft01Icon} size={15} strokeWidth={2} />
+              </button>
+
+              {/* Slider Dots */}
+              <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg border border-white/10 bg-black/30 backdrop-blur-md">
+                {offerBanners.map((_, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => setActiveBannerIndex(idx)}
+                    aria-label={`Go to offer banner slide ${idx + 1}`}
+                    className={`h-2 rounded-full transition-all duration-300 ${
+                      idx === activeBannerIndex
+                        ? 'w-6 bg-purple-500'
+                        : 'w-2 bg-white/40 hover:bg-white/70'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              {/* Next Button */}
+              <button
+                type="button"
+                onClick={handleNextSlide}
+                aria-label="Next offer banner"
+                className="flex h-8 w-8 items-center justify-center rounded-lg border border-white/20 bg-black/40 text-white/80 backdrop-blur-md transition hover:bg-black/70 hover:text-white"
+              >
+                <UIIcon icon={ArrowRight01Icon} size={15} strokeWidth={2} />
+              </button>
+            </div>
+          )}
         </section>
 
         {/* ================================================================ */}

@@ -10,6 +10,8 @@ const auditLogSchema = new mongoose.Schema({
   userAgent: { type: String, default: '' },
 }, { timestamps: true });
 
-auditLogSchema.index({ createdAt: -1 });
+auditLogSchema.index({ createdAt: -1, _id: -1 });
+auditLogSchema.index({ action: 1, _id: -1 });
+auditLogSchema.index({ resourceType: 1, _id: -1 });
 
 export default mongoose.model('AuditLog', auditLogSchema);

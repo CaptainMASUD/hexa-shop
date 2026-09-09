@@ -125,7 +125,7 @@ const orderSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'payment_verification', 'confirmed', 'processing', 'delivered', 'rejected', 'cancelled', 'refunded'],
+    enum: ['pending', 'payment_verification', 'confirmed', 'processing', 'delivered', 'completed', 'rejected', 'cancelled', 'refunded'],
     default: 'payment_verification',
     index: true,
   },
@@ -134,10 +134,20 @@ const orderSchema = new mongoose.Schema({
   deliveries: { type: [deliverySchema], default: [], select: false },
   inventoryState: { type: String, enum: ['reserved', 'finalized', 'released'], default: 'reserved', index: true },
   inventoryReleased: { type: Boolean, default: false },
+  orderConfirmationEmailSent: { type: Boolean, default: false },
+  orderConfirmationEmailSentAt: { type: Date, default: null },
+  completionEmailSent: { type: Boolean, default: false },
+  completionEmailSentAt: { type: Date, default: null },
+  adminNotificationEmailSent: { type: Boolean, default: false },
+  adminNotificationEmailSentAt: { type: Date, default: null },
 }, { timestamps: true });
 
+orderSchema.index({ createdAt: -1, _id: -1 });
+orderSchema.index({ user: 1, _id: -1 });
 orderSchema.index({ user: 1, createdAt: -1 });
+orderSchema.index({ status: 1, _id: -1 });
 orderSchema.index({ status: 1, createdAt: -1 });
+orderSchema.index({ 'payment.status': 1, _id: -1 });
 orderSchema.index({ 'payment.status': 1, createdAt: -1 });
 orderSchema.index({ 'payment.methodId': 1, 'payment.transactionId': 1 }, { unique: true });
 

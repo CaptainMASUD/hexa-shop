@@ -18,6 +18,10 @@ export const env = {
   CLOUDINARY_API_KEY: process.env.CLOUDINARY_API_KEY || '',
   CLOUDINARY_API_SECRET: process.env.CLOUDINARY_API_SECRET || '',
   MAX_UPLOAD_MB: Number(process.env.MAX_UPLOAD_MB || 5),
+  CLIENT_URL: (process.env.CLIENT_URL || 'http://localhost:5173').split(',')[0].trim().replace(/\/+$/, ''),
+  RESEND_API_KEY: process.env.RESEND_API_KEY || '',
+  RESEND_FROM_EMAIL: process.env.RESEND_FROM_EMAIL || 'Hexa Store <onboarding@resend.dev>',
+  ADMIN_NOTIFICATION_EMAIL: process.env.ADMIN_NOTIFICATION_EMAIL || process.env.ADMIN_EMAIL || 'captainsit9@gmail.com',
 };
 
 export const isProduction = env.NODE_ENV === 'production';

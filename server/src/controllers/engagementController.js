@@ -10,6 +10,9 @@ import RefundRequest from '../models/RefundRequest.js';
 import WalletTransaction from '../models/WalletTransaction.js';
 import ActivityLog from '../models/ActivityLog.js';
 import Session from '../models/Session.js';
+import PaymentMethod from '../models/PaymentMethod.js';
+import ProductInteraction from '../models/ProductInteraction.js';
+import { getRecommendationsForUser } from '../services/recommendationService.js';
 import { ensureAdminOperationalAlerts } from '../services/operationalAlertService.js';
 import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
@@ -27,11 +30,13 @@ export const wishlist = asyncHandler(async (req, res) => {
 export const addWishlist = asyncHandler(async (req, res) => {
   const exists = await Product.exists({ _id: req.params.productId, status: 'active' }); if (!exists) throw new ApiError(404, 'Product not found');
   await User.updateOne({ _id: req.user._id }, { $addToSet: { wishlist: req.params.productId } });
+  await ProductInteraction.recordEvent(req.user._id, req.params.productId, 'wishlist_add');
   await logActivity(req, 'wishlist_added', { product: req.params.productId });
   return success(res, { message: 'Added to wishlist' });
 });
 export const removeWishlist = asyncHandler(async (req, res) => {
   await User.updateOne({ _id: req.user._id }, { $pull: { wishlist: req.params.productId } });
+  await ProductInteraction.recordEvent(req.user._id, req.params.productId, 'wishlist_remove');
   return success(res, { message: 'Removed from wishlist' });
 });
 
@@ -130,13 +135,16 @@ export const addRecentlyViewed = asyncHandler(async (req, res) => {
   const product = await Product.findOne({ _id: req.params.productId, status: 'active' }).select('_id');
   if (!product) throw new ApiError(404, 'Product not found');
 
-  // 1. Remove existing entry for this product atomically
+  // 1. Record consolidated interaction (increments view count, updates lastViewedAt)
+  await ProductInteraction.recordEvent(req.user._id, product._id, 'view');
+
+  // 2. Remove existing entry for this product atomically in User document
   await User.updateOne(
     { _id: req.user._id },
     { $pull: { recentlyViewed: { product: product._id } } }
   );
 
-  // 2. Prepend the new entry and trim to 20 items atomically
+  // 3. Prepend the new entry and trim to 20 items atomically
   await User.updateOne(
     { _id: req.user._id },
     {
@@ -154,11 +162,25 @@ export const addRecentlyViewed = asyncHandler(async (req, res) => {
   return success(res, { message: 'View recorded' });
 });
 export const recentlyViewed = asyncHandler(async (req,res)=>{ const user=await User.findById(req.user._id).populate({path:'recentlyViewed.product',match:{status:'active'},populate:{path:'category',select:'name slug'}}); return success(res,{data:user.recentlyViewed.filter(x=>x.product)}); });
-export const recommendations = asyncHandler(async (req,res)=>{
-  const user=await User.findById(req.user._id).select('recentlyViewed wishlist').lean(); const seedIds=[...(user.recentlyViewed||[]).map(x=>x.product),...(user.wishlist||[])].slice(0,12);
-  let categories=[]; if(seedIds.length) categories=await Product.distinct('category',{_id:{$in:seedIds}});
-  const filter={status:'active',_id:{$nin:seedIds}}; if(categories.length) filter.category={$in:categories};
-  const data=await Product.find(filter).populate('category','name slug').sort({popular:-1,soldQuantity:-1,createdAt:-1}).limit(12).lean({virtuals:true}); return success(res,{data});
+
+export const recommendations = asyncHandler(async (req, res) => {
+  const cartProductIds = req.query.cartProductIds
+    ? String(req.query.cartProductIds).split(',').map((s) => s.trim()).filter(Boolean)
+    : [];
+  const guestViewProductIds = req.query.guestViewProductIds
+    ? String(req.query.guestViewProductIds).split(',').map((s) => s.trim()).filter(Boolean)
+    : [];
+
+  const data = await getRecommendationsForUser(req.user?._id || null, {
+    limit: req.query.limit || 5,
+    category: req.query.category,
+    currentProductId: req.query.currentProductId,
+    search: req.query.search || req.query.q,
+    cartProductIds,
+    guestViewProductIds,
+  });
+
+  return success(res, { data });
 });
 
 export const createTicket = asyncHandler(async (req,res)=>{
@@ -233,3 +255,95 @@ export const myRefunds = asyncHandler(async (req,res)=>success(res,{data:await R
 export const mySessions = asyncHandler(async (req,res)=>{ const data=await Session.find({user:req.user._id,revokedAt:null,expiresAt:{$gt:new Date()}}).select('createdAt expiresAt ipAddress userAgent').sort({createdAt:-1}).lean(); return success(res,{data}); });
 export const revokeSession = asyncHandler(async (req,res)=>{ await Session.updateOne({_id:req.params.id,user:req.user._id},{$set:{revokedAt:new Date()}}); return success(res,{message:'Session revoked'}); });
 export const activity = asyncHandler(async (req,res)=>success(res,{data:await ActivityLog.find({user:req.user._id}).sort({createdAt:-1}).limit(100).lean()}));
+
+/**
+ * SAFE Chatbot Context Endpoint
+ * Returns non-sensitive customer account summaries for the AI assistant without exposing any secrets,
+ * passwords, PINs, license keys, delivery credentials, or tokens.
+ */
+export const chatbotContext = asyncHandler(async (req, res) => {
+  const user = req.user.toPublicJSON ? req.user.toPublicJSON() : req.user;
+  const [orders, subscriptions, paymentMethods, recommendedProducts, userWithPrefs] = await Promise.all([
+    Order.find({ user: req.user._id })
+      .select('orderNumber total status payment.status createdAt items.productName items.quantity')
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean(),
+    Subscription.find({ user: req.user._id })
+      .select('productName plan duration status expiresAt autoRenew createdAt')
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .lean(),
+    PaymentMethod.find({ active: true })
+      .select('name accountType gatewayType')
+      .sort({ displayOrder: 1, name: 1 })
+      .lean(),
+    Category.find({ status: 'active' })
+      .select('name slug')
+      .sort({ displayOrder: 1, name: 1 })
+      .lean(),
+    getRecommendationsForUser(req.user._id, { limit: 4 }),
+    User.findById(req.user._id)
+      .populate({ path: 'wishlist', match: { status: 'active' }, select: 'name slug' })
+      .populate({ path: 'recentlyViewed.product', match: { status: 'active' }, select: 'name slug' })
+      .lean(),
+  ]);
+
+  const wishlistSummaries = (userWithPrefs?.wishlist || []).slice(0, 8).map((p) => ({
+    name: p.name,
+    slug: p.slug,
+    url: `/product/${p.slug}`,
+  }));
+
+  const recentViewSummaries = (userWithPrefs?.recentlyViewed || [])
+    .filter((v) => v?.product)
+    .slice(0, 8)
+    .map((v) => ({
+      name: v.product.name,
+      slug: v.product.slug,
+      url: `/product/${v.product.slug}`,
+    }));
+
+  return success(res, {
+    data: {
+      account: {
+        name: user.name,
+        email: user.email,
+        walletBalance: user.walletBalance || 0,
+        loyaltyPoints: user.loyaltyPoints || 0,
+        referralCode: user.referralCode || '',
+        isEmailVerified: Boolean(user.isEmailVerified),
+      },
+      availableCategories: (categories || []).map((c) => ({
+        name: c.name,
+        slug: c.slug,
+        url: `/products?category=${c.slug}`,
+      })),
+      availablePaymentMethods: paymentMethods.map((p) => ({
+        name: p.name,
+        type: p.accountType || p.gatewayType,
+      })),
+      shoppingPreferences: {
+        wishlist: wishlistSummaries,
+        recentlyViewed: recentViewSummaries,
+      },
+      recommendedProducts,
+      recentOrders: orders.map((o) => ({
+        orderNumber: o.orderNumber,
+        total: o.total,
+        orderStatus: o.status,
+        paymentStatus: o.payment?.status || 'pending',
+        items: o.items?.map((i) => `${i.productName} (x${i.quantity})`).join(', ') || 'Digital Products',
+        createdAt: o.createdAt,
+      })),
+      subscriptions: subscriptions.map((s) => ({
+        productName: s.productName,
+        plan: s.plan || 'Standard',
+        status: s.status,
+        expiresAt: s.expiresAt,
+        autoRenew: Boolean(s.autoRenew),
+      })),
+    },
+  });
+});
+

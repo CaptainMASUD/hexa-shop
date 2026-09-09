@@ -58,6 +58,24 @@ const fulfillmentConfigSchema = new mongoose.Schema({
   extra: { type: mongoose.Schema.Types.Mixed, default: {} },
 }, { _id: false });
 
+const faqSchema = new mongoose.Schema({
+  question: { type: String, required: true, trim: true, maxlength: 300 },
+  answer: { type: String, required: true, trim: true, maxlength: 2000 },
+}, { _id: true });
+
+const guideStepSchema = new mongoose.Schema({
+  stepNumber: { type: Number, default: 1 },
+  title: { type: String, required: true, trim: true, maxlength: 160 },
+  description: { type: String, required: true, trim: true, maxlength: 1500 },
+  imageUrl: { type: String, default: '', trim: true },
+}, { _id: true });
+
+const guideSchema = new mongoose.Schema({
+  title: { type: String, default: '', trim: true, maxlength: 200 },
+  videoUrl: { type: String, default: '', trim: true },
+  steps: { type: [guideStepSchema], default: [] },
+}, { _id: false });
+
 const productSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true, maxlength: 160 },
   slug: { type: String, required: true, trim: true, lowercase: true, unique: true, index: true },
@@ -118,6 +136,8 @@ const productSchema = new mongoose.Schema({
   details: { type: mongoose.Schema.Types.Mixed, default: {} },
   customFields: { type: [customFieldSchema], default: [] },
   variants: { type: [variantSchema], default: [] },
+  faqs: { type: [faqSchema], default: [] },
+  guide: { type: guideSchema, default: () => ({ steps: [] }) },
 }, { timestamps: true });
 
 productSchema.virtual('stockStatus').get(function stockStatus() {
@@ -136,7 +156,8 @@ productSchema.virtual('stockStatus').get(function stockStatus() {
 });
 
 productSchema.set('toJSON', { virtuals: true });
-productSchema.set('toObject', { virtuals: true });
+productSchema.index({ createdAt: -1, _id: -1 });
+productSchema.index({ status: 1, _id: -1 });
 productSchema.index({ status: 1, category: 1, createdAt: -1 });
 productSchema.index({ status: 1, featured: 1, createdAt: -1 });
 productSchema.index({ status: 1, popular: 1, soldQuantity: -1 });

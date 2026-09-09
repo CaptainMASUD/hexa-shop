@@ -15,12 +15,16 @@ import {
 } from '@hugeicons/react'
 
 import {
+  ArrowDown01Icon,
   ArrowLeft01Icon,
   ArrowRight01Icon,
+  ArrowUp01Icon,
+  CheckmarkCircle01Icon,
   FlashIcon,
   HexagonIcon,
   LockPasswordIcon,
   MinusSignIcon,
+  Notification01Icon,
   PackageIcon,
   PlusSignIcon,
   Shield01Icon,
@@ -33,6 +37,7 @@ import {
 import {
   getProduct,
   getProducts,
+  subscribeRestockAlert,
 } from '../../api/catalog.api'
 
 import ProductCard, {
@@ -41,6 +46,7 @@ import ProductCard, {
 } from '../../components/ProductCard'
 
 import PageLoader from '../../components/PageLoader'
+import Modal from '../../components/Modal'
 
 import {
   useCart,
@@ -95,15 +101,14 @@ export default function ProductDetailsPage() {
   const [qty, setQty] =
     useState(1)
 
-  const [
-    customerInputs,
-    setCustomerInputs,
-  ] = useState({})
+  const [customerInputs, setCustomerInputs] = useState({})
+  const [inputErrors, setInputErrors] = useState({})
 
-  const [
-    inputErrors,
-    setInputErrors,
-  ] = useState({})
+  const [showRestockModal, setShowRestockModal] = useState(false)
+  const [restockEmail, setRestockEmail] = useState('')
+  const [restockLoading, setRestockLoading] = useState(false)
+  const [restockSuccess, setRestockSuccess] = useState(false)
+  const [openFaqIndex, setOpenFaqIndex] = useState(null)
 
   const { addItem } = useCart()
   const { notify } = useToast()
@@ -133,6 +138,12 @@ export default function ProductDetailsPage() {
           recordRecentlyViewed(
             item._id
           ).catch(() => {})
+        } else if (item?._id) {
+          try {
+            const guestViews = JSON.parse(sessionStorage.getItem('hexa_guest_views') || '[]')
+            const updated = [item._id, ...guestViews.filter((id) => id !== item._id)].slice(0, 10)
+            sessionStorage.setItem('hexa_guest_views', JSON.stringify(updated))
+          } catch {}
         }
 
         const firstVariant =
@@ -253,14 +264,85 @@ export default function ProductDetailsPage() {
   /* Page Metadata                                                          */
   /* ====================================================================== */
 
-  usePageMeta(
-    product
-      ? `${product.name} — HEXA`
-      : 'Product — HEXA',
+  const currentStock = product
+    ? (product.allowUnlimitedStock
+        ? 9999
+        : (variant ? Number(variant.stock || 0) : totalStock(product)))
+    : 0
 
-    product?.shortDescription ||
-      'View product pricing, plans and secure digital delivery information on HEXA.'
+  const isOutOfStock = currentStock <= 0
+
+  const jsonLd = useMemo(() => {
+    if (!product) return null
+    const schema = {
+      '@context': 'https://schema.org',
+      '@type': 'Product',
+      name: product.name,
+      description: product.shortDescription || product.description || 'Digital product',
+      image: [product.thumbnail?.url, product.bannerImage?.url].filter(Boolean),
+      brand: { '@type': 'Brand', name: product.brand || 'HEXA' },
+      sku: variant?.sku || product.slug,
+      offers: {
+        '@type': 'Offer',
+        url: typeof window !== 'undefined' ? window.location.href : '',
+        priceCurrency: 'BDT',
+        price: effectivePrice(variant || product),
+        availability: !isOutOfStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+        itemCondition: 'https://schema.org/NewCondition',
+      },
+    }
+    if (product.ratingAverage > 0) {
+      schema.aggregateRating = {
+        '@type': 'AggregateRating',
+        ratingValue: product.ratingAverage,
+        reviewCount: product.reviewCount || 1,
+      }
+    }
+    if (product.faqs?.length) {
+      schema.mainEntity = product.faqs.map((faq) => ({
+        '@type': 'Question',
+        name: faq.question,
+        acceptedAnswer: {
+          '@type': 'Answer',
+          text: faq.answer,
+        },
+      }))
+    }
+    return schema
+  }, [product, variant, isOutOfStock])
+
+  usePageMeta(
+    product ? `${product.name} — HEXA` : 'Product — HEXA',
+    product?.shortDescription || 'View product pricing, plans and secure digital delivery information on HEXA.',
+    {
+      image: product?.thumbnail?.url || product?.bannerImage?.url,
+      type: 'product',
+      price: effectivePrice(variant || product),
+      currency: 'BDT',
+      jsonLd,
+    }
   )
+
+  const handleRestockSubmit = async (e) => {
+    e.preventDefault()
+    if (!restockEmail || !restockEmail.includes('@')) {
+      notify('Please enter a valid email address', 'error')
+      return
+    }
+    setRestockLoading(true)
+    try {
+      await subscribeRestockAlert(product._id, {
+        email: restockEmail,
+        variantId: variant?._id || null,
+      })
+      setRestockSuccess(true)
+      notify('Subscribed! We will email you when this item is back in stock.')
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
+    } finally {
+      setRestockLoading(false)
+    }
+  }
 
   /* ====================================================================== */
   /* Loading                                                                */
@@ -322,15 +404,7 @@ export default function ProductDetailsPage() {
    * It is used only for purchase validation
    * and quantity limits.
    */
-  const stock =
-    variant
-      ? Number(
-          variant.stock ||
-            0
-        )
-      : totalStock(
-          product
-        )
+  const stock = currentStock
 
   const bannerUrl =
     product.bannerImage?.url ||
@@ -1699,109 +1773,42 @@ export default function ProductDetailsPage() {
             {/* Actions                                                      */}
             {/* ============================================================ */}
 
-            <div
-              className="
-                mt-4
+            <div className="mt-4 grid grid-cols-2 gap-2.5">
+              {stock <= 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setRestockSuccess(false)
+                    setShowRestockModal(true)
+                  }}
+                  className="col-span-2 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-sm font-bold text-amber-400 transition hover:bg-amber-500/20 active:scale-[0.99]"
+                >
+                  <HugeiconsIcon icon={Notification01Icon} size={18} />
+                  Notify Me When Available
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={add}
+                    disabled={stock < qty}
+                    className="hexa-btn-secondary !flex !h-11 !w-full !items-center !justify-center !gap-2 !rounded-xl !py-0 text-sm font-semibold transition-transform duration-150 ease-out hover:scale-[1.01] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
+                  >
+                    <UIIcon icon={ShoppingCart01Icon} size={18} strokeWidth={1.8} />
+                    Add to cart
+                  </button>
 
-                grid
-                gap-2
-              "
-            >
-              <button
-                type="button"
-                onClick={add}
-                disabled={
-                  stock < qty ||
-                  stock <= 0
-                }
-                className="
-                  hexa-btn-secondary
-
-                  !flex
-                  !h-11
-                  !w-full
-                  !items-center
-                  !justify-center
-                  !gap-2
-                  !rounded-xl
-                  !py-0
-
-                  transform-gpu
-
-                  text-sm
-                  font-semibold
-
-                  transition-transform
-                  duration-150
-                  ease-out
-
-                  hover:scale-[1.01]
-                  active:scale-[0.985]
-
-                  disabled:pointer-events-none
-                  disabled:opacity-40
-                "
-              >
-                <UIIcon
-                  icon={
-                    ShoppingCart01Icon
-                  }
-                  size={18}
-                  strokeWidth={
-                    1.8
-                  }
-                />
-
-                Add to cart
-              </button>
-
-              <button
-                type="button"
-                onClick={buy}
-                disabled={
-                  stock < qty ||
-                  stock <= 0
-                }
-                className="
-                  hexa-btn
-
-                  !flex
-                  !h-11
-                  !w-full
-                  !items-center
-                  !justify-center
-                  !gap-2
-                  !rounded-xl
-                  !py-0
-
-                  transform-gpu
-
-                  text-sm
-                  font-semibold
-
-                  transition-transform
-                  duration-150
-                  ease-out
-
-                  hover:scale-[1.01]
-                  active:scale-[0.985]
-
-                  disabled:pointer-events-none
-                  disabled:opacity-40
-                "
-              >
-                <UIIcon
-                  icon={
-                    FlashIcon
-                  }
-                  size={18}
-                  strokeWidth={
-                    1.8
-                  }
-                />
-
-                Buy now
-              </button>
+                  <button
+                    type="button"
+                    onClick={buy}
+                    disabled={stock < qty}
+                    className="hexa-btn !flex !h-11 !w-full !items-center !justify-center !gap-2 !rounded-xl !py-0 transform-gpu text-sm font-semibold transition-transform duration-150 ease-out hover:scale-[1.01] active:scale-[0.985] disabled:pointer-events-none disabled:opacity-40"
+                  >
+                    <UIIcon icon={FlashIcon} size={18} strokeWidth={1.8} />
+                    Buy now
+                  </button>
+                </>
+              )}
             </div>
 
             {/* ============================================================ */}
@@ -2097,6 +2104,157 @@ export default function ProductDetailsPage() {
             </p>
           </aside>
         </div>
+
+        {/* ================================================================ */}
+        {/* Step-by-Step Redemption Guide                                    */}
+        {/* ================================================================ */}
+        {product.guide?.steps?.length > 0 && (
+          <section className="mt-12 rounded-[20px] border border-purple-500/20 bg-purple-500/[0.03] p-6 sm:p-8">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-[var(--hexa-border)] pb-5">
+              <div>
+                <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-purple-400">Step-by-Step Instructions</p>
+                <h2 className="mt-1 text-xl font-bold text-[var(--hexa-text)]">{product.guide.title || 'How to Redeem & Use this Product'}</h2>
+              </div>
+              {product.guide.videoUrl && (
+                <a
+                  href={product.guide.videoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2 text-xs font-semibold text-white shadow-sm transition hover:bg-purple-700"
+                >
+                  Watch Video Guide
+                </a>
+              )}
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {product.guide.steps.map((step, idx) => (
+                <div key={idx} className="relative rounded-2xl border border-[var(--hexa-border)] bg-[var(--hexa-card)] p-5 shadow-sm">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-purple-500/15 text-xs font-black text-purple-400">
+                      {step.stepNumber || idx + 1}
+                    </span>
+                    <h3 className="font-bold text-sm text-[var(--hexa-text)]">{step.title}</h3>
+                  </div>
+                  <p className="mt-3 text-xs leading-relaxed text-[var(--hexa-muted)] whitespace-pre-line">{step.description}</p>
+                  {step.imageUrl && (
+                    <div className="mt-3 overflow-hidden rounded-xl border border-[var(--hexa-border)]">
+                      <img src={step.imageUrl} alt={step.title} className="h-36 w-full object-cover" />
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* ================================================================ */}
+        {/* Product FAQs Accordion                                           */}
+        {/* ================================================================ */}
+        {product.faqs?.length > 0 && (
+          <section className="mt-12 rounded-[20px] border border-[var(--hexa-border)] bg-[var(--hexa-card)] p-6 sm:p-8">
+            <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-purple-400">Got Questions?</p>
+            <h2 className="mt-1 text-xl font-bold text-[var(--hexa-text)]">Frequently Asked Questions</h2>
+            <div className="mt-6 space-y-3">
+              {product.faqs.map((faq, idx) => {
+                const isOpen = openFaqIndex === idx
+                return (
+                  <div key={idx} className="rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-surface)] overflow-hidden transition">
+                    <button
+                      type="button"
+                      onClick={() => setOpenFaqIndex(isOpen ? null : idx)}
+                      className="flex w-full items-center justify-between gap-4 p-4 text-left font-semibold text-sm text-[var(--hexa-text)] hover:text-purple-400 transition"
+                    >
+                      <span>{faq.question}</span>
+                      <HugeiconsIcon icon={isOpen ? ArrowUp01Icon : ArrowDown01Icon} size={16} className="shrink-0 text-[var(--hexa-muted)]" />
+                    </button>
+                    {isOpen && (
+                      <div className="border-t border-[var(--hexa-border)] p-4 text-xs leading-relaxed text-[var(--hexa-muted)] whitespace-pre-line bg-[var(--hexa-card)]/50">
+                        {faq.answer}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
+        {/* ================================================================ */}
+        {/* Restock Notification Modal                                       */}
+        {/* ================================================================ */}
+        <Modal
+          open={showRestockModal}
+          onClose={() => setShowRestockModal(false)}
+          title="Stock Alert Notification"
+          maxWidth="max-w-md"
+        >
+          {restockSuccess ? (
+            <div className="text-center py-4 space-y-3">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-400">
+                <HugeiconsIcon icon={CheckmarkCircle01Icon} size={28} />
+              </div>
+              <h3 className="font-bold text-base text-[var(--hexa-text)]">You're on the waitlist!</h3>
+              <p className="text-xs text-[var(--hexa-muted)] leading-relaxed">
+                We'll automatically send an email to <span className="font-semibold text-purple-400">{restockEmail}</span> as soon as this item is restocked.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowRestockModal(false)}
+                className="hexa-btn !w-full !mt-4"
+              >
+                Done
+              </button>
+            </div>
+          ) : (
+            <form onSubmit={handleRestockSubmit} className="space-y-4">
+              <div className="flex items-center gap-3 rounded-xl border border-purple-500/20 bg-purple-500/[0.04] p-3">
+                <div className="h-10 w-10 shrink-0 overflow-hidden rounded-lg bg-black/20">
+                  <img
+                    src={product.thumbnail?.url || '/assets/placeholder.png'}
+                    alt={product.name}
+                    className="h-full w-full object-cover"
+                  />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-xs text-[var(--hexa-text)] truncate">{product.name}</p>
+                  {variant && <p className="text-[11px] text-purple-400 truncate">Plan: {variant.name}</p>}
+                </div>
+              </div>
+
+              <p className="text-xs text-[var(--hexa-muted)]">
+                Enter your email address below. We will notify you immediately when this item is restocked.
+              </p>
+
+              <div>
+                <label className="block text-xs font-semibold text-[var(--hexa-text)] mb-1.5">Your Email</label>
+                <input
+                  type="email"
+                  required
+                  value={restockEmail}
+                  onChange={(e) => setRestockEmail(e.target.value)}
+                  placeholder="name@example.com"
+                  className="hexa-input text-xs"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={restockLoading}
+                className="hexa-btn !w-full flex items-center justify-center gap-2"
+              >
+                {restockLoading ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <>
+                    <HugeiconsIcon icon={Notification01Icon} size={16} />
+                    Subscribe to Restock Alert
+                  </>
+                )}
+              </button>
+            </form>
+          )}
+        </Modal>
 
         {/* ================================================================ */}
         {/* Reviews                                                          */}

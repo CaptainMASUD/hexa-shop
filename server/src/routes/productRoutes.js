@@ -1,9 +1,11 @@
 import { Router } from 'express';
-import { listProducts, getProduct, suggestions } from '../controllers/productController.js';
-import { validateQuery } from '../middleware/validate.js';
-import { productQuerySchema } from '../validations/schemas.js';
+import { listProducts, getProduct, suggestions, createRestockAlert } from '../controllers/productController.js';
+import { validateQuery, validateBody } from '../middleware/validate.js';
+import { productQuerySchema, restockAlertSchema } from '../validations/schemas.js';
+import { restockAlertLimiter } from '../middleware/rateLimiters.js';
 const router = Router();
 router.get('/suggestions', suggestions);
 router.get('/', validateQuery(productQuerySchema), listProducts);
 router.get('/:slugOrId', getProduct);
+router.post('/:id/restock-alert', restockAlertLimiter, validateBody(restockAlertSchema), createRestockAlert);
 export default router;

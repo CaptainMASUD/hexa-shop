@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 
 import { HugeiconsIcon } from '@hugeicons/react'
 
@@ -78,8 +78,8 @@ export default function ProductCard({
 }) {
   const { addItem } = useCart()
   const { notify } = useToast()
-  const { format } =
-    useCurrency()
+  const { format } = useCurrency()
+  const navigate = useNavigate()
 
   /* ---------------------------------------------------------------------- */
   /* Product data                                                           */
@@ -88,8 +88,7 @@ export default function ProductCard({
   const variants = (
     product.variants || []
   ).filter(
-    (variant) =>
-      variant.active
+    (variant) => variant.active !== false
   )
 
   const prices =
@@ -115,29 +114,18 @@ export default function ProductCard({
           ...variants.map(
             (variant) =>
               Number(
-                variant.regularPrice ||
-                  0
+                variant.regularPrice || 0
               )
           )
         )
       : Number(
-          product.regularPrice ||
-            0
+          product.regularPrice || 0
         )
 
   const stock =
-    variants.length
-      ? variants.reduce(
-          (sum, variant) =>
-            sum +
-            Number(
-              variant.stock || 0
-            ),
-          0
-        )
-      : Number(
-          product.stock || 0
-        )
+    product.allowUnlimitedStock
+      ? 9999
+      : totalStock(product)
 
   const defaultVariant =
     variants[0] || null
@@ -151,6 +139,11 @@ export default function ProductCard({
 
   const quickAdd = () => {
     if (stock <= 0) {
+      return
+    }
+
+    if (product.customFields?.some((f) => f.required) || variants.length > 1) {
+      navigate(`/product/${product.slug}`)
       return
     }
 

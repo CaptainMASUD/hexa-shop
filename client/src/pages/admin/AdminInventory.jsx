@@ -14,6 +14,7 @@ import { useToast } from '../../contexts/ToastContext'
 import AdminPageHeader from '../../components/AdminPageHeader'
 import Modal from '../../components/Modal'
 import StatusBadge from '../../components/StatusBadge'
+import AdminCursorPagination from '../../components/AdminCursorPagination'
 
 const initialStockForm = {
   productId: '',
@@ -49,7 +50,11 @@ const initialBulkForm = {
 export default function AdminInventory() {
   const [products, setProducts] = useState([])
   const [items, setItems] = useState([])
+  const [itemsMeta, setItemsMeta] = useState({})
+  const [itemsLimit, setItemsLimit] = useState(25)
   const [history, setHistory] = useState([])
+  const [historyMeta, setHistoryMeta] = useState({})
+  const [historyLimit, setHistoryLimit] = useState(25)
   const [stockOpen, setStockOpen] = useState(false)
   const [credOpen, setCredOpen] = useState(false)
   const [bulkOpen, setBulkOpen] = useState(false)
@@ -60,16 +65,45 @@ export default function AdminInventory() {
   const [saving, setSaving] = useState(false)
   const { notify } = useToast()
 
-  const load = async () => {
+  const loadItems = async (cursor = null, direction = 'next', currentLimit = itemsLimit) => {
     try {
-      const [productResult, itemResult, historyResult] = await Promise.all([
-        adminGet('/products', { limit: 100 }),
-        adminGet('/inventory/items'),
-        adminGet('/inventory/history'),
-      ])
-      setProducts(productResult.data || [])
+      const params = { limit: currentLimit }
+      if (cursor) {
+        params.cursor = cursor
+        params.direction = direction
+      }
+      const itemResult = await adminGet('/inventory/items', params)
       setItems(itemResult.data || [])
+      setItemsMeta(itemResult.meta || {})
+    } catch (error) {
+      notify(apiErrorMessage(error), 'error')
+    }
+  }
+
+  const loadHistory = async (cursor = null, direction = 'next', currentLimit = historyLimit) => {
+    try {
+      const params = { limit: currentLimit }
+      if (cursor) {
+        params.cursor = cursor
+        params.direction = direction
+      }
+      const historyResult = await adminGet('/inventory/history', params)
       setHistory(historyResult.data || [])
+      setHistoryMeta(historyResult.meta || {})
+    } catch (error) {
+      notify(apiErrorMessage(error), 'error')
+    }
+  }
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const productResult = await adminGet('/products', { limit: 100 })
+      setProducts(productResult.data || [])
+      await Promise.all([
+        loadItems(null, 'next', itemsLimit),
+        loadHistory(null, 'next', historyLimit),
+      ])
     } catch (error) {
       notify(apiErrorMessage(error), 'error')
     } finally {
@@ -297,6 +331,15 @@ export default function AdminInventory() {
               </tbody>
             </table>
           </div>
+          <AdminCursorPagination
+            meta={itemsMeta}
+            onNext={(c) => loadItems(c, 'next', itemsLimit)}
+            onPrev={(c) => loadItems(c, 'prev', itemsLimit)}
+            limit={itemsLimit}
+            onLimitChange={(l) => { setItemsLimit(l); loadItems(null, 'next', l) }}
+            loading={loading}
+            pageSizeOptions={[15, 25, 50, 100]}
+          />
         </section>
 
         <section className="hexa-card overflow-hidden">
@@ -332,6 +375,15 @@ export default function AdminInventory() {
               </tbody>
             </table>
           </div>
+          <AdminCursorPagination
+            meta={historyMeta}
+            onNext={(c) => loadHistory(c, 'next', historyLimit)}
+            onPrev={(c) => loadHistory(c, 'prev', historyLimit)}
+            limit={historyLimit}
+            onLimitChange={(l) => { setHistoryLimit(l); loadHistory(null, 'next', l) }}
+            loading={loading}
+            pageSizeOptions={[15, 25, 50, 100]}
+          />
         </section>
       </div>
 

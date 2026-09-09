@@ -12,6 +12,7 @@ import {
   PackageIcon,
   PlusSignIcon,
   RefreshIcon,
+  Shield01Icon,
   StarIcon,
   Ticket01Icon,
   UserShield01Icon,
@@ -21,11 +22,15 @@ import { apiErrorMessage } from '../../api/client'
 import { useToast } from '../../contexts/ToastContext'
 import AdminPageHeader from '../../components/AdminPageHeader'
 import StatusBadge from '../../components/StatusBadge'
+import Modal from '../../components/Modal'
+import AdminCursorPagination from '../../components/AdminCursorPagination'
 
 const tabs = [
   ['Coupons', 'coupons', Discount01Icon],
   ['Bundles', 'bundles', GiftIcon],
   ['Promotions', 'promotions', StarIcon],
+  ['Affiliate Payouts', 'affiliate_payouts', GiftIcon],
+  ['Fraud Blacklist', 'fraud_blacklist', Shield01Icon],
   ['Support', 'support', Ticket01Icon],
   ['Refunds', 'refunds', RefreshIcon],
   ['Reviews', 'reviews', Comment01Icon],
@@ -42,7 +47,7 @@ export default function AdminGrowthFeatures() {
     <>
       <AdminPageHeader
         title="Growth & experience"
-        description="Manage coupons, first-class bundles, targeted campaigns, retention, support, permissions and storefront settings."
+        description="Manage coupons, bundles, affiliate payouts, fraud protection blacklist, retention, support, permissions and storefront settings."
       />
       <div className="mb-6 flex gap-2 overflow-x-auto pb-2">
         {tabs.map(([label, key, Icon]) => (
@@ -61,6 +66,8 @@ export default function AdminGrowthFeatures() {
       {tab === 'coupons' && <Coupons />}
       {tab === 'bundles' && <Bundles />}
       {tab === 'promotions' && <Promotions />}
+      {tab === 'affiliate_payouts' && <AffiliatePayouts />}
+      {tab === 'fraud_blacklist' && <FraudBlacklist />}
       {tab === 'support' && <Support />}
       {tab === 'refunds' && <Refunds />}
       {tab === 'reviews' && <Reviews />}
@@ -1016,6 +1023,452 @@ function CheckList({ title, rows, selected, onChange }) {
           </label>
         )) : <p className="p-2 text-xs text-[var(--hexa-muted)]">No entries</p>}
       </div>
+    </div>
+  )
+}
+
+function AffiliatePayouts() {
+  const { notify } = useToast()
+  const [rows, setRows] = useState([])
+  const [meta, setMeta] = useState({})
+  const [limit, setLimit] = useState(25)
+  const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('all')
+  const [modalItem, setModalItem] = useState(null)
+  const [modalStatus, setModalStatus] = useState('approved')
+  const [transactionRef, setTransactionRef] = useState('')
+  const [adminNote, setAdminNote] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const load = (cursor = null, direction = 'next', currentLimit = limit) => {
+    setLoading(true)
+    const params = { limit: currentLimit }
+    if (cursor) {
+      params.cursor = cursor
+      params.direction = direction
+    }
+    if (filter !== 'all') params.status = filter
+    adminGet('/features/affiliate/payouts', params)
+      .then((r) => {
+        setRows(r.data || [])
+        setMeta(r.meta || {})
+      })
+      .catch((err) => notify(apiErrorMessage(err), 'error'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    load(null, 'next', limit)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter])
+
+  const openProcessModal = (item) => {
+    setModalItem(item)
+    setModalStatus(item.status === 'pending' ? 'approved' : item.status)
+    setTransactionRef(item.transactionReference || '')
+    setAdminNote(item.adminNote || '')
+  }
+
+  const submitProcess = async (e) => {
+    e.preventDefault()
+    if (!modalItem) return
+    setSaving(true)
+    try {
+      await adminPatch(`/features/affiliate/payouts/${modalItem._id}`, {
+        status: modalStatus,
+        transactionReference: transactionRef,
+        adminNote,
+      })
+      notify(`Payout request marked as ${modalStatus}`)
+      setModalItem(null)
+      load(null, 'next', limit)
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[var(--hexa-text)]">Affiliate Payout Requests</h2>
+          <p className="text-xs text-[var(--hexa-muted)]">Review affiliate withdrawal requests and record payment references.</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <select
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            className="hexa-input !py-1.5 text-xs font-semibold"
+          >
+            <option value="all">All statuses</option>
+            <option value="pending">Pending review</option>
+            <option value="processing">Processing</option>
+            <option value="approved">Approved & Sent</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <button onClick={() => load(null, 'next', limit)} className="hexa-btn-secondary !py-1.5 text-xs">
+            <HugeiconsIcon icon={RefreshIcon} size={14} /> Refresh
+          </button>
+        </div>
+      </div>
+
+      <ListCard title={`Payout Requests (${rows.length})`}>
+        {loading ? (
+          <EmptyAdminRow text="Loading affiliate requests..." />
+        ) : rows.length === 0 ? (
+          <EmptyAdminRow text="No affiliate payout requests found." />
+        ) : (
+          rows.map((r) => (
+            <div key={r._id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 hover:bg-[var(--hexa-surface)]/50">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-base font-black text-[var(--hexa-text)]">৳{r.amount}</span>
+                  <span className="rounded-md bg-purple-500/10 px-2.5 py-0.5 text-xs font-bold text-purple-400 uppercase">
+                    {r.paymentMethod} · {r.accountNumber} ({r.accountType})
+                  </span>
+                  <StatusBadge value={r.status} />
+                </div>
+                <div className="mt-2 text-xs text-[var(--hexa-muted)]">
+                  <span>User: <strong className="text-[var(--hexa-text)]">{r.user?.name || 'User'}</strong> ({r.user?.email || '—'} · {r.user?.phone || 'No phone'})</span>
+                  <span className="ml-3">Requested: {new Date(r.createdAt).toLocaleString()}</span>
+                </div>
+                {r.transactionReference && (
+                  <p className="mt-1 text-xs text-emerald-400 font-mono">Trx Reference: {r.transactionReference}</p>
+                )}
+                {r.adminNote && (
+                  <p className="mt-1 text-xs text-amber-400">Admin note: {r.adminNote}</p>
+                )}
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => openProcessModal(r)}
+                  className="hexa-btn !py-1.5 !px-3 text-xs font-bold"
+                >
+                  Manage Payout
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+        <AdminCursorPagination
+          meta={meta}
+          onNext={(c) => load(c, 'next', limit)}
+          onPrev={(c) => load(c, 'prev', limit)}
+          limit={limit}
+          onLimitChange={(l) => { setLimit(l); load(null, 'next', l) }}
+          loading={loading}
+          pageSizeOptions={[15, 25, 50, 100]}
+        />
+      </ListCard>
+
+      <Modal
+        open={Boolean(modalItem)}
+        onClose={() => setModalItem(null)}
+        title="Process Affiliate Payout"
+        maxWidth="max-w-md"
+      >
+        {modalItem && (
+          <form onSubmit={submitProcess} className="space-y-4">
+            <div className="rounded-xl border border-purple-500/20 bg-purple-500/[0.04] p-3 text-xs space-y-1">
+              <p className="text-[var(--hexa-muted)]">User: <strong className="text-[var(--hexa-text)]">{modalItem.user?.name}</strong> ({modalItem.user?.email})</p>
+              <p className="text-[var(--hexa-muted)]">Amount: <strong className="text-purple-400 font-bold">৳{modalItem.amount}</strong></p>
+              <p className="text-[var(--hexa-muted)]">Method: <strong className="uppercase text-[var(--hexa-text)]">{modalItem.paymentMethod}</strong> ({modalItem.accountNumber}) · {modalItem.accountType}</p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[var(--hexa-text)] mb-1">Update Status</label>
+              <select
+                value={modalStatus}
+                onChange={(e) => setModalStatus(e.target.value)}
+                className="hexa-input text-xs"
+              >
+                <option value="approved">Approved & Sent (Final)</option>
+                <option value="processing">Processing (In Transfer)</option>
+                <option value="rejected">Rejected (Refund to User Wallet)</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[var(--hexa-text)] mb-1">Transaction Reference / TrxID</label>
+              <input
+                value={transactionRef}
+                onChange={(e) => setTransactionRef(e.target.value)}
+                placeholder="e.g. bKash TrxID BL7890XYZ or Bank Ref"
+                className="hexa-input text-xs"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-[var(--hexa-text)] mb-1">Admin Note / Reason (Visible to user if rejected)</label>
+              <textarea
+                rows={2}
+                value={adminNote}
+                onChange={(e) => setAdminNote(e.target.value)}
+                placeholder="e.g. Sent via bKash Personal 017XXXXX or Invalid account number"
+                className="hexa-input text-xs"
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="hexa-btn !w-full !mt-2 text-xs font-bold"
+            >
+              {saving ? 'Updating...' : 'Save & Update Payout'}
+            </button>
+          </form>
+        )}
+      </Modal>
+    </div>
+  )
+}
+
+function FraudBlacklist() {
+  const { notify } = useToast()
+  const [rows, setRows] = useState([])
+  const [meta, setMeta] = useState({})
+  const [limit, setLimit] = useState(25)
+  const [loading, setLoading] = useState(true)
+  const [typeFilter, setTypeFilter] = useState('all')
+  const [query, setQuery] = useState('')
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [form, setForm] = useState({ type: 'ip', value: '', reason: '', expiresAt: '' })
+  const [submitting, setSubmitting] = useState(false)
+
+  const load = (cursor = null, direction = 'next', currentLimit = limit) => {
+    setLoading(true)
+    const params = { limit: currentLimit }
+    if (cursor) {
+      params.cursor = cursor
+      params.direction = direction
+    }
+    if (typeFilter !== 'all') params.type = typeFilter
+    if (query.trim()) params.q = query.trim()
+    adminGet('/features/fraud-blocks', params)
+      .then((r) => {
+        setRows(r.data || [])
+        setMeta(r.meta || {})
+      })
+      .catch((err) => notify(apiErrorMessage(err), 'error'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    load(null, 'next', limit)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [typeFilter])
+
+  const handleCreate = async (e) => {
+    e.preventDefault()
+    if (!form.value) return notify('Please enter a target value', 'error')
+    setSubmitting(true)
+    try {
+      await adminPost('/features/fraud-blocks', form)
+      notify(`${form.type.toUpperCase()} blacklisted successfully`)
+      setShowAddModal(false)
+      setForm({ type: 'ip', value: '', reason: '', expiresAt: '' })
+      load(null, 'next', limit)
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const handleToggle = async (id) => {
+    try {
+      await adminPatch(`/features/fraud-blocks/${id}/toggle`)
+      notify('Blacklist restriction toggled')
+      load(null, 'next', limit)
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
+    }
+  }
+
+  const handleDelete = async (id) => {
+    if (!window.confirm('Remove this security restriction?')) return
+    try {
+      await adminDelete(`/features/fraud-blocks/${id}`)
+      notify('Security blacklist removed')
+      load(null, 'next', limit)
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-xl font-bold text-[var(--hexa-text)]">Security & Fraud Blacklist</h2>
+          <p className="text-xs text-[var(--hexa-muted)]">Ban suspicious IP addresses, fraudulent phone numbers, or spammer emails from checkout and authentication.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowAddModal(true)}
+          className="hexa-btn flex items-center gap-2 !py-2 text-xs font-bold"
+        >
+          <HugeiconsIcon icon={PlusSignIcon} size={15} /> + Add Blacklist Rule
+        </button>
+      </div>
+
+      <div className="flex flex-col sm:flex-row gap-3">
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            load(null, 'next', limit)
+          }}
+          className="flex-1 flex gap-2"
+        >
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search IP, phone, email or reason..."
+            className="hexa-input text-xs"
+          />
+          <button type="submit" className="hexa-btn-secondary !py-2 text-xs">Search</button>
+        </form>
+
+        <select
+          value={typeFilter}
+          onChange={(e) => setTypeFilter(e.target.value)}
+          className="hexa-input !py-2 text-xs font-semibold sm:w-48"
+        >
+          <option value="all">All types</option>
+          <option value="ip">IP Addresses</option>
+          <option value="phone">Phone Numbers</option>
+          <option value="email">Email Addresses</option>
+          <option value="account">Account IDs</option>
+        </select>
+      </div>
+
+      <ListCard title={`Blacklist Entries (${rows.length})`}>
+        {loading ? (
+          <EmptyAdminRow text="Loading fraud blacklist..." />
+        ) : rows.length === 0 ? (
+          <EmptyAdminRow text="No blacklisted IPs, phones, or emails found." />
+        ) : (
+          rows.map((r) => (
+            <div key={r._id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 hover:bg-[var(--hexa-surface)]/50">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="rounded-md bg-rose-500/10 px-2 py-0.5 text-xs font-bold text-rose-400 uppercase">
+                    {r.type}
+                  </span>
+                  <span className="font-mono font-bold text-sm text-[var(--hexa-text)]">{r.value}</span>
+                  <span className={`rounded-full px-2 py-0.5 text-[10px] font-bold uppercase ${r.isActive ? 'bg-rose-500/15 text-rose-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                    {r.isActive ? 'Active Block' : 'Disabled'}
+                  </span>
+                  {r.blockedCount > 0 && (
+                    <span className="rounded-md bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold text-amber-400">
+                      Blocked {r.blockedCount} attempts
+                    </span>
+                  )}
+                </div>
+                <p className="mt-1 text-xs text-[var(--hexa-muted)]">Reason: <span className="text-[var(--hexa-text)]">{r.reason || 'Fraud prevention'}</span></p>
+                <div className="mt-1 text-[11px] text-[var(--hexa-muted)] flex gap-4">
+                  <span>Added on {new Date(r.createdAt).toLocaleString()}</span>
+                  {r.expiresAt && <span>Expires: {new Date(r.expiresAt).toLocaleDateString()}</span>}
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleToggle(r._id)}
+                  className="hexa-btn-secondary !py-1 !px-2.5 text-xs font-semibold"
+                >
+                  {r.isActive ? 'Disable' : 'Enable'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleDelete(r._id)}
+                  className="rounded-lg p-2 text-rose-400 hover:bg-rose-500/10 transition"
+                  title="Delete rule"
+                >
+                  <HugeiconsIcon icon={Delete02Icon} size={16} />
+                </button>
+              </div>
+            </div>
+          ))
+        )}
+        <AdminCursorPagination
+          meta={meta}
+          onNext={(c) => load(c, 'next', limit)}
+          onPrev={(c) => load(c, 'prev', limit)}
+          limit={limit}
+          onLimitChange={(l) => { setLimit(l); load(null, 'next', l) }}
+          loading={loading}
+          pageSizeOptions={[15, 25, 50, 100]}
+        />
+      </ListCard>
+
+      <Modal
+        open={showAddModal}
+        onClose={() => setShowAddModal(false)}
+        title="Add Security Blacklist Rule"
+        maxWidth="max-w-md"
+      >
+        <form onSubmit={handleCreate} className="space-y-4">
+          <div>
+            <label className="block text-xs font-semibold text-[var(--hexa-text)] mb-1">Blacklist Target Type</label>
+            <select
+              value={form.type}
+              onChange={(e) => setForm({ ...form, type: e.target.value })}
+              className="hexa-input text-xs"
+            >
+              <option value="ip">IP Address (e.g. 103.204.x.x)</option>
+              <option value="phone">Phone Number (e.g. 01712345678)</option>
+              <option value="email">Email Address (e.g. spammer@fraud.com)</option>
+              <option value="account">Account ID</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[var(--hexa-text)] mb-1">Target Value</label>
+            <input
+              required
+              value={form.value}
+              onChange={(e) => setForm({ ...form, value: e.target.value })}
+              placeholder={form.type === 'ip' ? 'e.g. 192.168.1.1' : form.type === 'phone' ? 'e.g. 01712345678' : 'e.g. user@example.com'}
+              className="hexa-input text-xs"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[var(--hexa-text)] mb-1">Reason / Suspicious Activity Details</label>
+            <input
+              required
+              value={form.reason}
+              onChange={(e) => setForm({ ...form, reason: e.target.value })}
+              placeholder="e.g. Repeated fake transaction IDs or bot spam"
+              className="hexa-input text-xs"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-[var(--hexa-text)] mb-1">Expiration (Optional - leave empty for permanent)</label>
+            <input
+              type="datetime-local"
+              value={form.expiresAt}
+              onChange={(e) => setForm({ ...form, expiresAt: e.target.value })}
+              className="hexa-input text-xs"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={submitting}
+            className="hexa-btn !w-full !mt-2 text-xs font-bold"
+          >
+            {submitting ? 'Adding...' : 'Add to Security Blacklist'}
+          </button>
+        </form>
+      </Modal>
     </div>
   )
 }

@@ -11,6 +11,8 @@ const stockMovementSchema = new mongoose.Schema({
   changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 }, { timestamps: true });
 
+stockMovementSchema.index({ createdAt: -1, _id: -1 });
+stockMovementSchema.index({ product: 1, _id: -1 });
 stockMovementSchema.index({ product: 1, createdAt: -1 });
 
 export default mongoose.model('StockMovement', stockMovementSchema);

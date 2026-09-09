@@ -5,12 +5,13 @@ import { hashToken } from '../utils/security.js';
 import ApiError from '../utils/ApiError.js';
 
 const refreshCookieName = 'hexa_refresh';
+const REUSE_GRACE_PERIOD_MS = 25 * 1000; // 25s grace window for concurrent requests on reload
 
 const refreshCookieOptions = (expiresAt) => ({
   httpOnly: true,
   secure: isProduction,
   sameSite: isProduction ? 'none' : 'lax',
-  path: '/api/v1/auth',
+  path: '/',
   expires: expiresAt,
 });
 
@@ -56,14 +57,35 @@ export const rotateRefreshToken = async (rawToken, requestMeta = {}) => {
   if (payload.type !== 'refresh' || !payload.sid) throw new ApiError(401, 'Invalid refresh token');
 
   const current = await Session.findById(payload.sid);
-  if (!current || current.revokedAt || current.expiresAt <= new Date() || current.tokenHash !== hashToken(rawToken)) {
-    if (current?.user) await Session.updateMany({ user: current.user, revokedAt: null }, { revokedAt: new Date() });
+  if (!current || current.expiresAt <= new Date() || current.tokenHash !== hashToken(rawToken)) {
     throw new ApiError(401, 'Session expired. Please sign in again.');
   }
 
   const User = (await import('../models/User.js')).default;
   const user = await User.findById(payload.sub);
   if (!user || !user.isActive) throw new ApiError(401, 'Account is unavailable');
+
+  // If already revoked, check if it was recently rotated within the grace window (concurrency/page reload race)
+  if (current.revokedAt) {
+    const elapsed = Date.now() - new Date(current.revokedAt).getTime();
+    if (elapsed < REUSE_GRACE_PERIOD_MS && current.rotatedTo) {
+      const activeSession = await Session.findById(current.rotatedTo);
+      if (activeSession && !activeSession.revokedAt && activeSession.expiresAt > new Date()) {
+        return {
+          accessToken: signAccessToken(user),
+          refreshToken: rawToken,
+          expiresAt: activeSession.expiresAt,
+          session: activeSession,
+          user,
+        };
+      }
+    }
+
+    if (current?.user) {
+      await Session.updateMany({ user: current.user, revokedAt: null }, { revokedAt: new Date() });
+    }
+    throw new ApiError(401, 'Session expired. Please sign in again.');
+  }
 
   const next = await createSessionTokens(user, requestMeta);
   current.revokedAt = new Date();
@@ -87,7 +109,12 @@ export const setRefreshCookie = (res, refreshToken, expiresAt) => {
 };
 
 export const clearRefreshCookie = (res) => {
-  res.clearCookie(refreshCookieName, { httpOnly: true, secure: isProduction, sameSite: isProduction ? 'none' : 'lax', path: '/api/v1/auth' });
+  res.clearCookie(refreshCookieName, {
+    httpOnly: true,
+    secure: isProduction,
+    sameSite: isProduction ? 'none' : 'lax',
+    path: '/',
+  });
 };
 
 export const getRefreshCookie = (req) => req.cookies?.[refreshCookieName];

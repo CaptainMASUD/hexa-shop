@@ -20,6 +20,8 @@ const inventoryItemSchema = new mongoose.Schema({
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 }, { timestamps: true });
 
+inventoryItemSchema.index({ createdAt: -1, _id: -1 });
+inventoryItemSchema.index({ status: 1, _id: -1 });
 inventoryItemSchema.index({ product: 1, variantId: 1, status: 1 });
 inventoryItemSchema.index({ product: 1, variantId: 1, itemType: 1, status: 1 });
 

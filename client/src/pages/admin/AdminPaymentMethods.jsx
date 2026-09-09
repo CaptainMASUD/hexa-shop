@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
-import { Delete02Icon, Edit02Icon, PlusSignIcon, QrCode01Icon } from '@hugeicons/core-free-icons'
+import { Delete02Icon, Edit02Icon, PlusSignIcon, QrCode01Icon, Search01Icon } from '@hugeicons/core-free-icons'
 import { adminDelete, adminGet, adminPost, adminPut } from '../../api/admin.api'
 import { apiErrorMessage } from '../../api/client'
 import { useToast } from '../../contexts/ToastContext'
@@ -8,6 +8,7 @@ import AdminPageHeader from '../../components/AdminPageHeader'
 import ImageUploader from '../../components/ImageUploader'
 import Modal from '../../components/Modal'
 import StatusBadge from '../../components/StatusBadge'
+import AdminCursorPagination from '../../components/AdminCursorPagination'
 
 const blank = {
   name: '',
@@ -41,14 +42,66 @@ const accountTypePresets = [
 
 export default function AdminPaymentMethods() {
   const [items, setItems] = useState([])
+  const [meta, setMeta] = useState({})
+  const [limit, setLimit] = useState(30)
+  const [loading, setLoading] = useState(false)
+  const [q, setQ] = useState('')
+  const [activeFilter, setActiveFilter] = useState('')
   const [form, setForm] = useState(blank)
   const [editing, setEditing] = useState(null)
   const [open, setOpen] = useState(false)
   const [qrModal, setQrModal] = useState(null)
   const { notify } = useToast()
 
-  const load = () => adminGet('/payment-methods').then((r) => setItems(r.data || []))
-  useEffect(() => { load().catch(() => {}) }, [])
+  const load = async (
+    cursor = null,
+    direction = 'next',
+    currentLimit = limit,
+    searchQ = q,
+    active = activeFilter
+  ) => {
+    setLoading(true)
+    try {
+      const params = { limit: currentLimit }
+      if (cursor) {
+        params.cursor = cursor
+        params.direction = direction
+      }
+      if (searchQ && searchQ.trim()) params.q = searchQ.trim()
+      if (active) params.active = active
+
+      const r = await adminGet('/payment-methods', params)
+      setItems(r.data || [])
+      setMeta(r.meta || {})
+    } catch (e) {
+      notify(apiErrorMessage(e, 'Failed to load payment methods'), 'error')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    load(null, 'next', limit, '', '').catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeFilter])
+
+  const search = (e) => {
+    e.preventDefault()
+    load(null, 'next', limit, q, activeFilter)
+  }
+
+  const handleNext = (nextCursor) => {
+    load(nextCursor, 'next', limit, q, activeFilter)
+  }
+
+  const handlePrev = (prevCursor) => {
+    load(prevCursor, 'prev', limit, q, activeFilter)
+  }
+
+  const handleLimitChange = (newLimit) => {
+    setLimit(newLimit)
+    load(null, 'next', newLimit, q, activeFilter)
+  }
 
   const edit = (item) => {
     setEditing(item._id)
@@ -73,7 +126,7 @@ export default function AdminPaymentMethods() {
         notify('Payment method created')
       }
       setOpen(false)
-      load()
+      load(null, 'next', limit, q, activeFilter)
     } catch (error) {
       notify(apiErrorMessage(error), 'error')
     }
@@ -84,7 +137,7 @@ export default function AdminPaymentMethods() {
     try {
       await adminDelete(`/payment-methods/${id}`)
       notify('Payment method disabled')
-      load()
+      load(null, 'next', limit, q, activeFilter)
     } catch (e) {
       notify(apiErrorMessage(e), 'error')
     }
@@ -110,6 +163,28 @@ export default function AdminPaymentMethods() {
           </button>
         }
       />
+
+      <form onSubmit={search} className="mb-5 flex flex-wrap gap-2.5">
+        <div className="relative flex-1 max-w-sm">
+          <HugeiconsIcon icon={Search01Icon} size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--hexa-muted)]" />
+          <input
+            className="hexa-input !pl-9 text-xs"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Search by name, slug or account type..."
+          />
+        </div>
+        <select
+          className="hexa-input sm:w-40 text-xs"
+          value={activeFilter}
+          onChange={(e) => setActiveFilter(e.target.value)}
+        >
+          <option value="">All Statuses</option>
+          <option value="true">Active Only</option>
+          <option value="false">Disabled Only</option>
+        </select>
+        <button className="hexa-btn text-xs !py-2 !px-4">Search</button>
+      </form>
 
       <div className="hexa-card overflow-x-auto">
         <table className="w-full min-w-[880px] text-left text-sm">
@@ -192,6 +267,16 @@ export default function AdminPaymentMethods() {
             ))}
           </tbody>
         </table>
+
+        <AdminCursorPagination
+          meta={meta}
+          onNext={handleNext}
+          onPrev={handlePrev}
+          limit={limit}
+          onLimitChange={handleLimitChange}
+          loading={loading}
+          pageSizeOptions={[15, 30, 50, 100]}
+        />
       </div>
 
       <Modal open={open} onClose={() => setOpen(false)} title={editing ? 'Edit payment method' : 'Add payment method'}>

@@ -871,18 +871,26 @@ export default function Header() {
                   active:scale-[0.97]
                 "
               >
-                <UIIcon
-                  icon={UserCircleIcon}
-                  size={20}
-                  className="
-                    text-[var(--hexa-muted)]
+                {user?.avatar?.url ? (
+                  <img
+                    src={user.avatar.url}
+                    alt={user.name}
+                    className="h-5 w-5 rounded-full object-cover shrink-0 ring-1 ring-purple-500/30"
+                  />
+                ) : (
+                  <UIIcon
+                    icon={UserCircleIcon}
+                    size={20}
+                    className="
+                      text-[var(--hexa-muted)]
 
-                    transition-colors
-                    duration-150
+                      transition-colors
+                      duration-150
 
-                    group-hover:text-purple-600
-                  "
-                />
+                      group-hover:text-purple-600
+                    "
+                  />
+                )}
 
                 <span
                   className="
@@ -1723,22 +1731,32 @@ function ProfileDropdown({
           <div
             className="
               flex
-              h-9
-              w-9
+              h-10
+              w-10
               shrink-0
               items-center
               justify-center
-
+              overflow-hidden
               rounded-full
-
+              border
+              border-purple-500/30
               bg-purple-500/10
               text-purple-600
+              font-bold
             "
           >
-            <UIIcon
-              icon={UserCircleIcon}
-              size={21}
-            />
+            {user?.avatar?.url ? (
+              <img
+                src={user.avatar.url}
+                alt={user.name}
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <UIIcon
+                icon={UserCircleIcon}
+                size={22}
+              />
+            )}
           </div>
 
           <div className="min-w-0">

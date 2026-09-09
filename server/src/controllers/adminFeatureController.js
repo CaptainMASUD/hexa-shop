@@ -17,6 +17,8 @@ import WalletTransaction from '../models/WalletTransaction.js';
 import ActivityLog from '../models/ActivityLog.js';
 import Subscription from '../models/Subscription.js';
 import Banner from '../models/Banner.js';
+import AffiliatePayout from '../models/AffiliatePayout.js';
+import FraudBlock from '../models/FraudBlock.js';
 import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { success } from '../utils/response.js';
@@ -26,6 +28,7 @@ import { getSettings } from '../services/settingsService.js';
 import { creditWallet } from '../services/rewardService.js';
 import { notifyUser } from '../services/notificationService.js';
 import { ensureAdminOperationalAlerts } from '../services/operationalAlertService.js';
+import { paginateWithCursor } from '../utils/cursorPagination.js';
 
 const existingIds = async (Model, ids = [], filter = {}) => {
   const unique = [...new Set((ids || []).filter(Boolean).map(String))];
@@ -269,4 +272,127 @@ export const growthAnalytics=asyncHandler(async(_req,res)=>{
     User.countDocuments({createdAt:{$gte:since30}}),Order.countDocuments({createdAt:{$gte:since30}}),Order.aggregate([{$match:{createdAt:{$gte:since30},'payment.status':'verified'}},{$group:{_id:null,revenue:{$sum:'$total'},orders:{$sum:1}}}]),User.countDocuments({'wishlist.0':{$exists:true}}),Cart.countDocuments({status:'abandoned'}),SupportTicket.countDocuments({status:{$in:['open','in_progress','waiting_customer']}}),RefundRequest.countDocuments({status:{$in:['requested','reviewing']}}),Subscription.countDocuments({status:'active'}),ActivityLog.countDocuments({type:'product_viewed',createdAt:{$gte:since7}})
   ]);
   return success(res,{data:{newUsers30,orders30,revenue30:revenueAgg[0]?.revenue||0,verifiedOrders30:revenueAgg[0]?.orders||0,wishlistUsers,abandonedCarts:abandoned,openTickets:ticketsOpen,pendingRefunds:refundPending,activeSubscriptions:activeSubs,productViews7:views}});
+});
+
+export const adminPayouts = asyncHandler(async (req, res) => {
+  const query = {};
+  if (req.query.status && req.query.status.trim()) query.status = req.query.status.trim();
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
+  const result = await paginateWithCursor(AffiliatePayout, query, {
+    limit,
+    cursor: req.query.cursor,
+    direction: req.query.direction,
+    populate: [
+      { path: 'user', select: 'name email phone referralCode walletBalance' },
+      { path: 'processedBy', select: 'name email' },
+    ],
+    includeTotal: true,
+  });
+  return success(res, result);
+});
+
+export const processPayout = asyncHandler(async (req, res) => {
+  const { status, adminNote = '', transactionReference = '' } = req.body;
+  const payout = await AffiliatePayout.findById(req.params.id);
+  if (!payout) throw new ApiError(404, 'Payout request not found');
+
+  const previousStatus = payout.status;
+  payout.status = status;
+  payout.adminNote = adminNote;
+  payout.transactionReference = transactionReference;
+  payout.processedBy = req.user._id;
+  payout.processedAt = new Date();
+  await payout.save();
+
+  // If rejected and previously was pending/processing, refund the balance back to user's wallet
+  if (status === 'rejected' && ['pending', 'processing'].includes(previousStatus)) {
+    const user = await User.findById(payout.user);
+    if (user) {
+      user.walletBalance = (user.walletBalance || 0) + payout.amount;
+      await user.save({ validateBeforeSave: false });
+
+      await WalletTransaction.create({
+        user: user._id,
+        type: 'credit',
+        amount: payout.amount,
+        source: 'payout_refund',
+        note: `Refund for rejected payout: ${adminNote || 'Payout request rejected'}`,
+        balanceAfter: user.walletBalance,
+      });
+
+      await notifyUser(
+        user._id,
+        'payout_rejected',
+        '❌ Payout Request Rejected',
+        `Your payout request for ৳${payout.amount} was rejected. Amount has been refunded to your wallet balance. Reason: ${adminNote || 'Contact support'}`,
+        '/account'
+      ).catch(() => {});
+    }
+  } else if (status === 'approved') {
+    await notifyUser(
+      payout.user,
+      'payout_approved',
+      '✅ Affiliate Payout Approved & Sent',
+      `Your payout of ৳${payout.amount} has been approved and sent via ${payout.paymentMethod.toUpperCase()} (${payout.accountNumber}). Ref: ${transactionReference || 'Complete'}`,
+      '/account'
+    ).catch(() => {});
+  }
+
+  await writeAudit(req, 'affiliate_payout_processed', 'AffiliatePayout', payout._id, { status, amount: payout.amount });
+  return success(res, { message: `Payout request marked as ${status}`, data: payout });
+});
+
+export const listFraudBlocks = asyncHandler(async (req, res) => {
+  const query = {};
+  if (req.query.type && req.query.type.trim()) query.type = req.query.type.trim();
+  if (req.query.q && req.query.q.trim()) {
+    const regex = new RegExp(req.query.q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    query.$or = [{ value: regex }, { reason: regex }];
+  }
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
+  const result = await paginateWithCursor(FraudBlock, query, {
+    limit,
+    cursor: req.query.cursor,
+    direction: req.query.direction,
+    populate: { path: 'createdBy', select: 'name email' },
+    includeTotal: true,
+  });
+  return success(res, result);
+});
+
+export const createFraudBlock = asyncHandler(async (req, res) => {
+  const { type, value, reason, expiresAt } = req.body;
+  const cleanValue = String(value).toLowerCase().trim().replace(/[\s-]/g, '');
+
+  const block = await FraudBlock.findOneAndUpdate(
+    { type, value: cleanValue },
+    {
+      $set: {
+        reason: reason || 'Fraud prevention / security restriction',
+        isActive: true,
+        expiresAt: expiresAt ? new Date(expiresAt) : null,
+        createdBy: req.user._id,
+      },
+    },
+    { upsert: true, new: true }
+  );
+
+  await writeAudit(req, 'fraud_block_created', 'FraudBlock', block._id, { type, value: cleanValue, reason });
+  return success(res, { status: 201, message: `${type.toUpperCase()} added to security blacklist`, data: block });
+});
+
+export const removeFraudBlock = asyncHandler(async (req, res) => {
+  const block = await FraudBlock.findById(req.params.id);
+  if (!block) throw new ApiError(404, 'Fraud block entry not found');
+  await block.deleteOne();
+  await writeAudit(req, 'fraud_block_removed', 'FraudBlock', block._id, { value: block.value });
+  return success(res, { message: 'Security restriction removed' });
+});
+
+export const toggleFraudBlock = asyncHandler(async (req, res) => {
+  const block = await FraudBlock.findById(req.params.id);
+  if (!block) throw new ApiError(404, 'Fraud block entry not found');
+  block.isActive = !block.isActive;
+  await block.save();
+  return success(res, { message: `Fraud block ${block.isActive ? 'activated' : 'deactivated'}`, data: block });
 });

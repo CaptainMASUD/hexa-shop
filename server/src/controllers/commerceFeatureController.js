@@ -2,6 +2,9 @@ import Bundle from '../models/Bundle.js';
 import Promotion from '../models/Promotion.js';
 import Coupon from '../models/Coupon.js';
 import Order from '../models/Order.js';
+import User from '../models/User.js';
+import AffiliatePayout from '../models/AffiliatePayout.js';
+import WalletTransaction from '../models/WalletTransaction.js';
 import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { success } from '../utils/response.js';
@@ -101,6 +104,7 @@ export const checkoutQuote = asyncHandler(async (req, res) => {
     bundleId: req.body.bundleId,
     walletAmount: req.body.walletAmount,
     loyaltyPoints: req.body.loyaltyPoints,
+    strict: false,
   });
   return success(res, {
     data: {
@@ -116,5 +120,51 @@ export const checkoutQuote = asyncHandler(async (req, res) => {
       loyaltyPointsRedeemed: prepared.loyaltyPointsRedeemed,
       currency: prepared.currency,
     },
+  });
+});
+
+export const listMyPayouts = asyncHandler(async (req, res) => {
+  const payouts = await AffiliatePayout.find({ user: req.user._id })
+    .sort({ createdAt: -1 })
+    .limit(50)
+    .lean();
+  return success(res, { data: payouts });
+});
+
+export const requestAffiliatePayout = asyncHandler(async (req, res) => {
+  const amount = Number(req.body.amount);
+  const user = await User.findById(req.user._id);
+  if (!user) throw new ApiError(404, 'User not found');
+
+  if (user.walletBalance < amount) {
+    throw new ApiError(400, `Insufficient wallet balance. You have ৳${user.walletBalance}, but requested ৳${amount}`);
+  }
+
+  // Deduct/reserve wallet balance for the payout
+  user.walletBalance = Math.max(0, user.walletBalance - amount);
+  await user.save({ validateBeforeSave: false });
+
+  await WalletTransaction.create({
+    user: user._id,
+    type: 'debit',
+    amount,
+    source: 'payout_request',
+    note: `Affiliate payout request to ${req.body.paymentMethod.toUpperCase()} (${req.body.accountNumber})`,
+    balanceAfter: user.walletBalance,
+  });
+
+  const payout = await AffiliatePayout.create({
+    user: user._id,
+    amount,
+    paymentMethod: req.body.paymentMethod,
+    accountNumber: req.body.accountNumber,
+    accountType: req.body.accountType || 'personal',
+    status: 'pending',
+  });
+
+  return success(res, {
+    status: 201,
+    message: 'Affiliate payout request submitted successfully. Admin will review and process your payment.',
+    data: payout,
   });
 });

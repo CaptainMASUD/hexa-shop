@@ -4,20 +4,62 @@ import asyncHandler from '../utils/asyncHandler.js';
 import { success } from '../utils/response.js';
 import { destroyImage } from '../services/cloudinaryService.js';
 import { writeAudit } from '../services/auditService.js';
+import { paginateWithCursor } from '../utils/cursorPagination.js';
 
-export const listBanners = asyncHandler(async (_req, res) => {
+export const listBanners = asyncHandler(async (req, res) => {
   const now = new Date();
-  const data = await Banner.find({
+  const filter = {
     active: true,
     $and: [
       { $or: [{ startDate: null }, { startDate: { $exists: false } }, { startDate: { $lte: now } }] },
       { $or: [{ endDate: null }, { endDate: { $exists: false } }, { endDate: { $gte: now } }] },
     ],
-  }).sort({ displayOrder: 1 }).lean();
+  };
+
+  if (req.query.placement) {
+    const p = String(req.query.placement).trim().toLowerCase();
+    if (p === 'offer' || p === 'offers') {
+      filter.placement = { $in: ['offer', 'offers'] };
+    } else if (p === 'hero' || p === 'home') {
+      filter.placement = { $in: ['hero', 'home'] };
+    } else {
+      filter.placement = p;
+    }
+  }
+
+  const data = await Banner.find(filter).sort({ displayOrder: 1, createdAt: -1 }).lean();
   return success(res, { data });
 });
 
-export const listAdminBanners = asyncHandler(async (_req, res) => success(res, { data: await Banner.find().sort({ displayOrder: 1 }).lean() }));
+export const listAdminBanners = asyncHandler(async (req, res) => {
+  const filter = {};
+  if (req.query.q && req.query.q.trim()) {
+    const regex = new RegExp(req.query.q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    filter.$or = [{ title: regex }, { subtitle: regex }];
+  }
+  if (req.query.active === 'true') filter.active = true;
+  if (req.query.active === 'false') filter.active = false;
+
+  if (req.query.placement && req.query.placement.trim()) {
+    const p = String(req.query.placement).trim().toLowerCase();
+    if (p === 'offer' || p === 'offers') {
+      filter.placement = { $in: ['offer', 'offers'] };
+    } else if (p === 'hero' || p === 'home') {
+      filter.placement = { $in: ['hero', 'home'] };
+    } else {
+      filter.placement = p;
+    }
+  }
+
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
+  const result = await paginateWithCursor(Banner, filter, {
+    limit,
+    cursor: req.query.cursor,
+    direction: req.query.direction,
+    includeTotal: true,
+  });
+  return success(res, result);
+});
 
 export const createBanner = asyncHandler(async (req, res) => {
   const banner = await Banner.create(req.body);

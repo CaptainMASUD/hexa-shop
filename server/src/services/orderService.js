@@ -99,7 +99,7 @@ const addInventoryRequirement = (map, snapshot) => {
   else map.set(key, { ...snapshot });
 };
 
-export const buildCartSnapshot = async ({ cartItems = [], legacyBundleId = null }) => {
+export const buildCartSnapshot = async ({ cartItems = [], legacyBundleId = null, strict = true }) => {
   let normalized = normalizeCartItems(cartItems);
   const directBundleIds = normalized.filter((item) => item.itemType === 'bundle').map((item) => item.bundleId);
   if (legacyBundleId && !mongoose.isValidObjectId(legacyBundleId)) throw new ApiError(400, 'Invalid bundle');
@@ -139,7 +139,7 @@ export const buildCartSnapshot = async ({ cartItems = [], legacyBundleId = null 
       const { sanitizedInputs, fieldSnapshots } = validateDynamicCustomerInputs(
         product.customFields || [],
         item.customerInputs || {},
-        { strict: true },
+        { strict },
       );
 
       orderItems.push({
@@ -280,11 +280,26 @@ export const evaluateCoupon = async ({ code, userId, pricingLines, subtotal }) =
   return { coupon, ...calculated };
 };
 
-export const prepareOrder = async ({ cartItems, paymentMethodId, customer, userId, couponCode = '', bundleId = null, walletAmount = 0, loyaltyPoints = 0 }) => {
-  const method = await PaymentMethod.findOne({ _id: paymentMethodId, active: true }).lean();
-  if (!method) throw new ApiError(400, 'Selected payment method is unavailable');
+export const prepareOrder = async ({
+  cartItems,
+  paymentMethodId,
+  customer,
+  userId,
+  couponCode = '',
+  bundleId = null,
+  walletAmount = 0,
+  loyaltyPoints = 0,
+  strict = true,
+}) => {
+  let method = null;
+  if (paymentMethodId) {
+    method = await PaymentMethod.findOne({ _id: paymentMethodId, active: true }).lean();
+  }
+  if (!method && strict) {
+    throw new ApiError(400, 'Selected payment method is unavailable');
+  }
 
-  const snapshot = await buildCartSnapshot({ cartItems, legacyBundleId: bundleId });
+  const snapshot = await buildCartSnapshot({ cartItems, legacyBundleId: bundleId, strict });
   const activePromotions = await Promotion.find({
     active: true,
     deletedAt: null,

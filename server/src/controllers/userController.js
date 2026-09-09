@@ -4,23 +4,28 @@ import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { success } from '../utils/response.js';
 import { writeAudit } from '../services/auditService.js';
+import { paginateWithCursor } from '../utils/cursorPagination.js';
 
 export const listUsers = asyncHandler(async (req, res) => {
-  const page = Math.max(1, Number(req.query.page || 1));
   const limit = Math.min(100, Math.max(1, Number(req.query.limit || 20)));
   const filter = {};
-  if (req.query.role) filter.role = req.query.role;
+  if (req.query.role && req.query.role.trim()) filter.role = req.query.role.trim();
   if (req.query.active === 'true') filter.isActive = true;
   if (req.query.active === 'false') filter.isActive = false;
-  if (req.query.q) {
-    const regex = new RegExp(req.query.q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+  if (req.query.q && req.query.q.trim()) {
+    const regex = new RegExp(req.query.q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
     filter.$or = [{ name: regex }, { email: regex }, { phone: regex }];
   }
-  const [users, total] = await Promise.all([
-    User.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
-    User.countDocuments(filter),
-  ]);
-  return success(res, { data: users.map(({ password: _p, ...user }) => user), meta: { page, limit, total, pages: Math.ceil(total / limit) } });
+
+  const result = await paginateWithCursor(User, filter, {
+    limit,
+    cursor: req.query.cursor,
+    direction: req.query.direction,
+    select: '-password -twoFactorSecret -emailVerificationToken',
+    includeTotal: true,
+  });
+
+  return success(res, result);
 });
 
 export const getUser = asyncHandler(async (req, res) => {

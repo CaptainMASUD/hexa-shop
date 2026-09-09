@@ -8,6 +8,8 @@ export const setAccessToken = (token = '') => {
   accessToken = token || ''
 }
 
+export const getAccessToken = () => accessToken
+
 export const api = axios.create({
   baseURL: API_URL,
   withCredentials: true,
@@ -18,10 +20,27 @@ export const api = axios.create({
 const refreshClient = axios.create({ baseURL: API_URL, withCredentials: true, timeout: 15000 })
 
 export const refreshSessionApi = async () => {
-  const response = await refreshClient.post('/auth/refresh')
-  setAccessToken(response.data.data.accessToken)
-  window.dispatchEvent(new CustomEvent('hexa:session-refreshed', { detail: response.data.data }))
-  return response.data.data
+  if (refreshPromise) return refreshPromise
+  refreshPromise = refreshClient
+    .post('/auth/refresh')
+    .then((response) => {
+      const data = response.data?.data
+      if (data?.accessToken) {
+        setAccessToken(data.accessToken)
+        window.dispatchEvent(new CustomEvent('hexa:session-refreshed', { detail: data }))
+        return data
+      }
+      setAccessToken('')
+      return null
+    })
+    .catch((err) => {
+      setAccessToken('')
+      return null
+    })
+    .finally(() => {
+      refreshPromise = null
+    })
+  return refreshPromise
 }
 
 api.interceptors.request.use((config) => {
@@ -39,13 +58,15 @@ api.interceptors.response.use(
     if (status === 401 && original && !original._retry && !isRefresh && !isLogin) {
       original._retry = true
       try {
-        refreshPromise ||= refreshSessionApi().finally(() => { refreshPromise = null })
-        const session = await refreshPromise
-        original.headers.Authorization = `Bearer ${session.accessToken}`
-        return api(original)
-      } catch {
+        const session = await refreshSessionApi()
+        if (session?.accessToken) {
+          original.headers.Authorization = `Bearer ${session.accessToken}`
+          return api(original)
+        }
+      } catch (refreshErr) {
         setAccessToken('')
         window.dispatchEvent(new Event('hexa:session-expired'))
+        return Promise.reject(refreshErr)
       }
     }
     return Promise.reject(error)

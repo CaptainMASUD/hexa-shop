@@ -5,10 +5,12 @@ import {
   bundleCreateSchema, bundleUpdateSchema,
   couponCreateSchema, couponUpdateSchema,
   promotionCreateSchema, promotionUpdateSchema,
+  adminAffiliatePayoutSchema, fraudBlockSchema,
 } from '../validations/schemas.js';
 import {
   couponCrud,bundleCrud,promotionCrud,roleCrud,adminReviews,moderateReview,adminTickets,adminTicket,adminReplyTicket,adminTicketStatus,
   adminRefunds,resolveRefund,adminNotifications,createNotification,abandonedCarts,assignRole,adjustWallet,siteSettings,updateSiteSettings,backupExport,backupRestore,growthAnalytics,
+  adminPayouts,processPayout,listFraudBlocks,createFraudBlock,removeFraudBlock,toggleFraudBlock,
 } from '../controllers/adminFeatureController.js';
 
 const router=Router();
@@ -53,4 +55,12 @@ router.get('/abandoned-carts',permit('growth.manage'),abandonedCarts);
 router.patch('/users/:userId/role',permit('roles.manage'),assignRole);router.post('/users/:userId/wallet',permit('users.manage'),adjustWallet);
 router.get('/settings',permit('settings.manage'),siteSettings);router.put('/settings',permit('settings.manage'),updateSiteSettings);
 router.get('/backup/export',permit('backup.manage'),backupExport);router.post('/backup/restore',permit('backup.manage'),backupRestore);router.get('/growth-analytics',permit('reports.view'),growthAnalytics);
+
+router.get('/affiliate/payouts', permit('growth.manage'), adminPayouts);
+router.patch('/affiliate/payouts/:id', permit('growth.manage'), validateBody(adminAffiliatePayoutSchema), processPayout);
+
+router.get('/fraud-blocks', permit('settings.manage'), listFraudBlocks);
+router.post('/fraud-blocks', permit('settings.manage'), validateBody(fraudBlockSchema), createFraudBlock);
+router.delete('/fraud-blocks/:id', permit('settings.manage'), removeFraudBlock);
+router.patch('/fraud-blocks/:id/toggle', permit('settings.manage'), toggleFraudBlock);
 export default router;

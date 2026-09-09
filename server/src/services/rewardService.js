@@ -4,19 +4,41 @@ import { getSettings } from './settingsService.js';
 import { notifyUser } from './notificationService.js';
 
 export const creditWallet = async (userId, amount, source, reference = null, note = '') => {
-  const value = Math.max(0, Number(amount || 0)); if (!value) return null;
+  const value = Math.max(0, Number(amount || 0));
+  if (!value) return null;
   const user = await User.findByIdAndUpdate(userId, { $inc: { walletBalance: value } }, { new: true });
   if (!user) return null;
-  await WalletTransaction.create({ user: userId, type: 'credit', amount: value, source, reference, note, balanceAfter: user.walletBalance });
-  return user;
+  const transaction = await WalletTransaction.create({
+    user: userId,
+    type: 'credit',
+    amount: value,
+    source,
+    reference,
+    note,
+    balanceAfter: user.walletBalance,
+  });
+  return { user, transaction, walletBalance: user.walletBalance };
 };
 
 export const debitWallet = async (userId, amount, source, reference = null, note = '') => {
-  const value = Math.max(0, Number(amount || 0)); if (!value) return null;
-  const user = await User.findOneAndUpdate({ _id: userId, walletBalance: { $gte: value } }, { $inc: { walletBalance: -value } }, { new: true });
+  const value = Math.max(0, Number(amount || 0));
+  if (!value) return null;
+  const user = await User.findOneAndUpdate(
+    { _id: userId, walletBalance: { $gte: value } },
+    { $inc: { walletBalance: -value } },
+    { new: true }
+  );
   if (!user) return null;
-  await WalletTransaction.create({ user: userId, type: 'debit', amount: value, source, reference, note, balanceAfter: user.walletBalance });
-  return user;
+  const transaction = await WalletTransaction.create({
+    user: userId,
+    type: 'debit',
+    amount: value,
+    source,
+    reference,
+    note,
+    balanceAfter: user.walletBalance,
+  });
+  return { user, transaction, walletBalance: user.walletBalance };
 };
 
 export const awardDeliveredOrder = async (order) => {

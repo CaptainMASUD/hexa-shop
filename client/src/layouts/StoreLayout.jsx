@@ -1,6 +1,7 @@
 import { Outlet, useLocation } from 'react-router-dom'
 import Header from '../components/Header'
 import Footer from '../components/Footer'
+import HexaAssistant from '../components/HexaAssistant'
 import { useEffect } from 'react'
 
 export default function StoreLayout() {
@@ -13,6 +14,7 @@ export default function StoreLayout() {
         <Outlet />
       </main>
       <Footer />
+      <HexaAssistant />
     </div>
   )
 }
