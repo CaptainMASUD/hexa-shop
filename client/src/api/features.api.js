@@ -1,11 +1,14 @@
 import { api } from './client'
-export const getBundles = (params={}) => api.get('/marketplace/bundles',{params}).then(r=>r.data.data)
-export const getBundle = (slug) => api.get(`/marketplace/bundles/${slug}`).then(r=>r.data.data)
-export const getPromotions = () => api.get('/marketplace/promotions').then(r=>r.data.data)
-export const getPublicSettings = () => api.get('/marketplace/settings').then(r=>r.data.data)
-export const validateCoupon = (payload) => api.post('/marketplace/coupons/validate',payload).then(r=>r.data.data)
-export const getCheckoutQuote = (payload) => api.post('/marketplace/quote',payload).then(r=>r.data.data)
-export const getInvoice = (orderId) => api.get(`/marketplace/invoice/${orderId}`).then(r=>r.data.data)
+import { cachedGet } from './apiCache'
+
+export const getHomeData = () => cachedGet('/marketplace/home', {}, 60000).then((r) => r.data)
+export const getBundles = (params = {}) => cachedGet('/marketplace/bundles', { params }, 60000).then((r) => r.data)
+export const getBundle = (slug) => cachedGet(`/marketplace/bundles/${slug}`, {}, 60000).then((r) => r.data)
+export const getPromotions = () => cachedGet('/marketplace/promotions', {}, 60000).then((r) => r.data)
+export const getPublicSettings = () => cachedGet('/marketplace/settings', {}, 120000).then((r) => r.data)
+export const validateCoupon = (payload) => api.post('/marketplace/coupons/validate', payload).then((r) => r.data.data)
+export const getCheckoutQuote = (payload) => api.post('/marketplace/quote', payload).then((r) => r.data.data)
+export const getInvoice = (orderId) => api.get(`/marketplace/invoice/${orderId}`).then((r) => r.data.data)
 
 export const getWishlist = () => api.get('/engagement/wishlist').then(r=>r.data.data)
 export const addWishlist = (id) => api.post(`/engagement/wishlist/${id}`).then(r=>r.data)

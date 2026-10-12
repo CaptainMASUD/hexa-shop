@@ -23,13 +23,25 @@ import { sendAdminNewOrderEmail, sendCustomerOrderConfirmationEmail, sendCustome
 import { paginateWithCursor } from '../utils/cursorPagination.js';
 
 const userOrderView = async (id, userId) => {
-  const order = await Order.findOne({ _id: id, user: userId }).select('+deliveries').lean();
+  const order = await Order.findOne({ _id: id, user: userId })
+    .select('+deliveries +deliveries.encryptedPayload')
+    .lean();
   if (!order) throw new ApiError(404, 'Order not found');
-  order.deliveries = (order.deliveries || []).map((delivery) => ({
-    ...delivery,
-    details: decryptJson(delivery.encryptedPayload),
-    encryptedPayload: undefined,
-  }));
+  order.deliveries = (order.deliveries || []).map((delivery) => {
+    let details = null;
+    if (delivery.encryptedPayload) {
+      try {
+        details = decryptJson(delivery.encryptedPayload);
+      } catch (e) {
+        console.error('[UserOrderView] Failed to decrypt delivery payload:', e.message);
+      }
+    }
+    return {
+      ...delivery,
+      details,
+      encryptedPayload: undefined,
+    };
+  });
   return order;
 };
 
@@ -203,9 +215,26 @@ export const adminOrders = asyncHandler(async (req, res) => {
 });
 
 export const adminOrder = asyncHandler(async (req, res) => {
-  const order = await Order.findById(req.params.id).select('+internalNotes +deliveries').populate('user', 'name email phone').lean();
+  const order = await Order.findById(req.params.id)
+    .select('+internalNotes +deliveries +deliveries.encryptedPayload')
+    .populate('user', 'name email phone')
+    .lean();
   if (!order) throw new ApiError(404, 'Order not found');
-  order.deliveries = (order.deliveries || []).map((delivery) => ({ ...delivery, details: decryptJson(delivery.encryptedPayload), encryptedPayload: undefined }));
+  order.deliveries = (order.deliveries || []).map((delivery) => {
+    let details = null;
+    if (delivery.encryptedPayload) {
+      try {
+        details = decryptJson(delivery.encryptedPayload);
+      } catch (e) {
+        console.error('[AdminOrder] Failed to decrypt delivery payload:', e.message);
+      }
+    }
+    return {
+      ...delivery,
+      details,
+      encryptedPayload: undefined,
+    };
+  });
   return success(res, { data: order });
 });
 

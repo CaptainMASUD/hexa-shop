@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
+  Coins01Icon,
+  Copy01Icon,
   Delete02Icon,
   DeliveryTruck01Icon,
   Edit02Icon,
@@ -27,6 +29,7 @@ import StatusBadge from '../../components/StatusBadge'
 import { useToast } from '../../contexts/ToastContext'
 import DynamicFieldBuilder from '../../components/DynamicFieldBuilder'
 import VariantManager from '../../components/VariantManager'
+import StockEntryModal from '../../components/StockEntryModal'
 import AdminCursorPagination from '../../components/AdminCursorPagination'
 
 const PRODUCT_TYPES = [
@@ -68,6 +71,7 @@ const blank = () => ({
   },
   regularPrice: 0,
   salePrice: 0,
+  purchasePrice: 0,
   currency: 'BDT',
   stock: 100,
   allowUnlimitedStock: false,
@@ -99,6 +103,11 @@ export default function AdminProducts() {
   const [form, setForm] = useState(blank)
   const [editing, setEditing] = useState(null)
   const [activeTab, setActiveTab] = useState('general') // 'general' | 'variants' | 'fields' | 'fulfillment' | 'media' | 'guide_faqs'
+  const [stockEntryModal, setStockEntryModal] = useState({
+    open: false,
+    product: null,
+    variantId: null,
+  })
   const [filterType, setFilterType] = useState('')
   const [filterCategory, setFilterCategory] = useState('')
   const [filterStatus, setFilterStatus] = useState('')
@@ -205,6 +214,9 @@ export default function AdminProducts() {
         ...p,
         category: p.category?._id || p.category,
         brand: p.brand || '',
+        purchasePrice: Number(p.purchasePrice ?? p.costPrice ?? 0),
+        regularPrice: Number(p.regularPrice ?? 0),
+        salePrice: Number(p.salePrice ?? 0),
         productType: p.productType || 'digital-product',
         fulfillmentType: p.fulfillmentType || (p.deliveryType === 'instant' ? 'license_key' : 'manual'),
         fulfillmentConfig: p.fulfillmentConfig || {
@@ -226,11 +238,13 @@ export default function AdminProducts() {
           const reg = Number(v.regularPrice || 0)
           const sale = Number(v.salePrice || 0)
           const disc = reg > 0 && sale < reg ? Math.round(((reg - sale) / reg) * 100) : 0
+          const buyCost = Number(v.purchasePrice ?? v.costPrice ?? 0)
           return {
             ...v,
             regularPrice: reg,
             salePrice: sale,
-            costPrice: Number(v.costPrice || 0),
+            costPrice: buyCost,
+            purchasePrice: buyCost,
             discountPercent: disc,
             stock: Number(v.stock || 0),
             unlimitedStock: Boolean(v.unlimitedStock),
@@ -247,6 +261,132 @@ export default function AdminProducts() {
     } catch (e) {
       notify(apiErrorMessage(e), 'error')
     }
+  }
+
+  const openDuplicate = async (id) => {
+    try {
+      const r = await adminGet(`/products/${id}`)
+      const p = r.data
+      setEditing(null)
+      setForm({
+        ...blank(),
+        ...p,
+        _id: undefined,
+        name: `${p.name} (Copy)`,
+        slug: '',
+        category: p.category?._id || p.category,
+        brand: p.brand || '',
+        purchasePrice: Number(p.purchasePrice ?? p.costPrice ?? 0),
+        regularPrice: Number(p.regularPrice ?? 0),
+        salePrice: Number(p.salePrice ?? 0),
+        productType: p.productType || 'digital-product',
+        fulfillmentType: p.fulfillmentType || (p.deliveryType === 'instant' ? 'license_key' : 'manual'),
+        fulfillmentConfig: p.fulfillmentConfig || {
+          provider: 'default',
+          serviceCode: '',
+          autoDeliverKey: false,
+          customInstructions: '',
+        },
+        tags: p.tags ? [...p.tags] : [],
+        searchKeywords: p.searchKeywords ? [...p.searchKeywords] : [],
+        details: p.details ? { ...p.details } : {},
+        customFields: p.customFields ? JSON.parse(JSON.stringify(p.customFields)) : [],
+        faqs: p.faqs ? JSON.parse(JSON.stringify(p.faqs)) : [],
+        guide: p.guide ? JSON.parse(JSON.stringify(p.guide)) : { title: '', videoUrl: '', steps: [] },
+        seo: { title: '', description: '', keywords: [] },
+        bannerImage: p.bannerImage,
+        thumbnail: p.thumbnail,
+        variants: (p.variants || []).map((v) => {
+          const reg = Number(v.regularPrice || 0)
+          const sale = Number(v.salePrice || 0)
+          const disc = reg > 0 && sale < reg ? Math.round(((reg - sale) / reg) * 100) : 0
+          const buyCost = Number(v.purchasePrice ?? v.costPrice ?? 0)
+          return {
+            ...v,
+            _id: undefined,
+            sku: v.sku ? `${v.sku}-COPY` : '',
+            regularPrice: reg,
+            salePrice: sale,
+            costPrice: buyCost,
+            purchasePrice: buyCost,
+            discountPercent: disc,
+            stock: 0,
+            unlimitedStock: Boolean(v.unlimitedStock),
+            region: v.region || '',
+            platform: v.platform || '',
+            duration: v.duration || '',
+            active: v.active !== false,
+          }
+        }),
+      })
+      setActiveTab('general')
+      setModal(true)
+      notify(`Duplicated template from "${p.name}". Edit details and save to create copy.`, 'info')
+    } catch (e) {
+      notify(apiErrorMessage(e), 'error')
+    }
+  }
+
+  const exportCatalogCsv = () => {
+    if (!items.length) {
+      notify('No products available to export', 'error')
+      return
+    }
+
+    const headers = [
+      'Product Name',
+      'Slug',
+      'Category',
+      'Brand',
+      'Product Type',
+      'Fulfillment Type',
+      'Cost / Purchase Price (BDT)',
+      'Regular Price (BDT)',
+      'Sale Price (BDT)',
+      'Stock Units',
+      'Variants Count',
+      'Status',
+      'Featured',
+      'Created At',
+    ]
+
+    const rows = items.map((p) => {
+      const catName = typeof p.category === 'object' ? p.category?.name : (categories.find((c) => c._id === p.category)?.name || '')
+      return [
+        p.name || '',
+        p.slug || '',
+        catName || '',
+        p.brand || '',
+        p.productType || '',
+        p.fulfillmentType || '',
+        p.purchasePrice ?? p.costPrice ?? 0,
+        p.regularPrice ?? 0,
+        p.salePrice ?? 0,
+        p.allowUnlimitedStock ? 'Unlimited' : (p.stock ?? 0),
+        p.variants?.length || 0,
+        p.status || '',
+        p.featured ? 'Yes' : 'No',
+        p.createdAt ? new Date(p.createdAt).toLocaleDateString() : '',
+      ]
+    })
+
+    const csvContent = [
+      headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(','),
+      ...rows.map((row) =>
+        row.map((val) => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')
+      ),
+    ].join('\r\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `hexa_catalog_${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    notify(`Exported ${items.length} products to CSV`, 'success')
   }
 
   const save = async (e) => {
@@ -268,6 +408,9 @@ export default function AdminProducts() {
       const baseSalePrice = form.variants.length > 0
         ? Number(form.variants[0].salePrice || form.variants[0].regularPrice || 0)
         : Number(form.salePrice || form.regularPrice || 0)
+      const basePurchasePrice = form.variants.length > 0
+        ? Number(form.variants[0].purchasePrice ?? form.variants[0].costPrice ?? 0)
+        : Number(form.purchasePrice ?? form.costPrice ?? 0)
 
       const payload = {
         ...form,
@@ -275,24 +418,30 @@ export default function AdminProducts() {
         brand: form.brand.trim(),
         regularPrice: baseRegPrice,
         salePrice: baseSalePrice,
+        purchasePrice: basePurchasePrice,
+        costPrice: basePurchasePrice,
         stock: Number(form.stock || 100),
         lowStockThreshold: Number(form.lowStockThreshold || 5),
         customFields: form.customFields || [],
-        variants: (form.variants || []).map((v, idx) => ({
-          name: v.name.trim(),
-          sku: v.sku?.trim() || '',
-          duration: v.duration?.trim() || '',
-          region: v.region?.trim() || '',
-          platform: v.platform?.trim() || '',
-          regularPrice: Number(v.regularPrice || 0),
-          salePrice: Number(v.salePrice || v.regularPrice || 0),
-          costPrice: Number(v.costPrice || 0),
-          stock: v.unlimitedStock ? 9999 : Number(v.stock || 0),
-          unlimitedStock: Boolean(v.unlimitedStock),
-          sortOrder: idx,
-          active: v.active !== false,
-          metadata: v.metadata || {},
-        })),
+        variants: (form.variants || []).map((v, idx) => {
+          const vCost = Number(v.purchasePrice ?? v.costPrice ?? 0)
+          return {
+            name: v.name.trim(),
+            sku: v.sku?.trim() || '',
+            duration: v.duration?.trim() || '',
+            region: v.region?.trim() || '',
+            platform: v.platform?.trim() || '',
+            regularPrice: Number(v.regularPrice || 0),
+            salePrice: Number(v.salePrice || v.regularPrice || 0),
+            costPrice: vCost,
+            purchasePrice: vCost,
+            stock: v.unlimitedStock ? 9999 : Number(v.stock || 0),
+            unlimitedStock: Boolean(v.unlimitedStock),
+            sortOrder: idx,
+            active: v.active !== false,
+            metadata: v.metadata || {},
+          }
+        }),
       }
 
       if (editing) await adminPut(`/products/${editing}`, payload)
@@ -343,9 +492,25 @@ export default function AdminProducts() {
         title="Products & Digital Catalog"
         description="Create and manage multi-type digital products: Subscriptions, Game Top-ups, Game Keys, Software Licenses, Gift Cards, and Accounts."
         action={
-          <button onClick={openNew} className="hexa-btn">
-            <HugeiconsIcon icon={PlusSignIcon} size={15} /> Add Product / Service
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={exportCatalogCsv}
+              className="flex items-center gap-2 rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-surface)] px-3.5 py-2.5 text-xs font-bold text-[var(--hexa-text)] hover:border-purple-500/30 transition cursor-pointer"
+              title="Export catalog to CSV"
+            >
+              <HugeiconsIcon icon={Copy01Icon} size={15} /> Export Catalog CSV
+            </button>
+            <button
+              onClick={() => setStockEntryModal({ open: true, product: null, variantId: null })}
+              className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition cursor-pointer"
+            >
+              <HugeiconsIcon icon={Coins01Icon} size={15} /> Quick Stock Entry
+            </button>
+            <button onClick={openNew} className="hexa-btn">
+              <HugeiconsIcon icon={PlusSignIcon} size={15} /> Add Product / Service
+            </button>
+          </div>
         }
       />
 
@@ -406,7 +571,7 @@ export default function AdminProducts() {
         <table className="w-full min-w-[960px] text-left text-sm">
           <thead className="border-b border-[var(--hexa-border)] text-xs uppercase tracking-wider text-[var(--hexa-muted)]">
             <tr>
-              {['Product / Service', 'Category', 'Type', 'Variants / Plans', 'Price Range', 'Stock', 'Status', 'Actions'].map((h) => (
+              {['Product / Service', 'Category', 'Type', 'Variants / Plans', 'Pricing & Margins', 'Stock Units', 'Status', 'Actions'].map((h) => (
                 <th key={h} className="px-5 py-4">{h}</th>
               ))}
             </tr>
@@ -429,6 +594,16 @@ export default function AdminProducts() {
               const maxPrice = variantCount > 0
                 ? Math.max(...p.variants.map((v) => Number(v.salePrice || v.regularPrice || 0)))
                 : Number(p.salePrice || p.regularPrice || 0)
+
+              const hasVariants = variantCount > 0
+              const minCost = hasVariants
+                ? Math.min(...p.variants.map((v) => Number(v.purchasePrice ?? v.costPrice ?? 0)))
+                : Number(p.purchasePrice ?? p.costPrice ?? 0)
+              const maxCost = hasVariants
+                ? Math.max(...p.variants.map((v) => Number(v.purchasePrice ?? v.costPrice ?? 0)))
+                : Number(p.purchasePrice ?? p.costPrice ?? 0)
+              const minProfit = minPrice - minCost
+              const minMargin = minPrice > 0 ? Math.round((minProfit / minPrice) * 100) : 0
 
               return (
                 <tr key={p._id} className="border-b border-[var(--hexa-border)] transition hover:bg-[var(--hexa-card)]/40">
@@ -469,27 +644,82 @@ export default function AdminProducts() {
                       </span>
                     )}
                   </td>
-                  <td className="px-5 py-4 font-bold text-[var(--hexa-text)]">
-                    {minPrice === maxPrice ? (
-                      `৳${minPrice.toLocaleString()}`
+                  <td className="px-5 py-4">
+                    <p className="font-bold text-[var(--hexa-text)]">
+                      {minPrice === maxPrice ? (
+                        `৳${minPrice.toLocaleString()}`
+                      ) : (
+                        `৳${minPrice.toLocaleString()} – ৳${maxPrice.toLocaleString()}`
+                      )}
+                    </p>
+                    {maxCost > 0 ? (
+                      <p className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 mt-0.5">
+                        <span>Cost: ৳{minCost === maxCost ? minCost.toLocaleString() : `${minCost.toLocaleString()}–${maxCost.toLocaleString()}`}</span>
+                        <span className="text-[var(--hexa-muted)]">·</span>
+                        <span className="font-semibold text-emerald-300">
+                          +{minProfit >= 0 ? `৳${minProfit.toLocaleString()}` : `-৳${Math.abs(minProfit).toLocaleString()}`} ({minMargin}%)
+                        </span>
+                      </p>
                     ) : (
-                      `৳${minPrice.toLocaleString()} – ৳${maxPrice.toLocaleString()}`
+                      <p className="text-[10px] text-[var(--hexa-muted)]">Cost not set</p>
                     )}
                   </td>
                   <td className="px-5 py-4">
-                    <StatusBadge value={p.stockStatus || 'in_stock'} />
+                    <div className="flex items-center gap-2">
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`inline-block h-2 w-2 rounded-full ${
+                            p.allowUnlimitedStock
+                              ? 'bg-blue-400'
+                              : (p.stock || 0) <= (p.lowStockThreshold || 5)
+                              ? 'bg-rose-400'
+                              : 'bg-emerald-400'
+                          }`} />
+                          <span className="font-bold text-xs text-[var(--hexa-text)]">
+                            {p.allowUnlimitedStock ? '∞ Unlimited' : `${Number(p.stock || 0).toLocaleString()} units`}
+                          </span>
+                        </div>
+                        <StatusBadge value={p.stockStatus || 'in_stock'} />
+                      </div>
+                      {!p.allowUnlimitedStock && (
+                        <button
+                          type="button"
+                          onClick={() => setStockEntryModal({ open: true, product: p, variantId: null })}
+                          className="rounded-lg border border-emerald-500/20 bg-emerald-500/10 p-1.5 text-emerald-400 hover:bg-emerald-500/20 transition cursor-pointer"
+                          title="Quick Stock Entry / Cost Update"
+                        >
+                          <HugeiconsIcon icon={Coins01Icon} size={14} />
+                        </button>
+                      )}
+                    </div>
                   </td>
                   <td className="px-5 py-4">
                     <StatusBadge value={p.status} />
                   </td>
                   <td className="px-5 py-4">
                     <div className="flex gap-2">
+                      {!p.allowUnlimitedStock && (
+                        <button
+                          onClick={() => setStockEntryModal({ open: true, product: p, variantId: null })}
+                          className="rounded-lg p-2 text-emerald-400 transition hover:bg-emerald-500/10 cursor-pointer"
+                          title="Stock Entry & Cost Adjustment"
+                        >
+                          <HugeiconsIcon icon={Coins01Icon} size={16} />
+                        </button>
+                      )}
                       <button
                         onClick={() => openEdit(p._id)}
                         className="rounded-lg p-2 text-purple-300 transition hover:bg-purple-500/10 cursor-pointer"
                         title="Edit Product"
                       >
                         <HugeiconsIcon icon={Edit02Icon} size={16} />
+                      </button>
+                      <button
+                        onClick={() => openDuplicate(p._id)}
+                        className="rounded-lg p-2 text-indigo-400 transition hover:bg-indigo-500/10 cursor-pointer"
+                        title="Duplicate / Clone Product"
+                      >
+                        <HugeiconsIcon icon={Copy01Icon} size={16} />
                       </button>
                       <button
                         onClick={() =>
@@ -664,6 +894,77 @@ export default function AdminProducts() {
                   placeholder="Instant verified top-up within 5-10 minutes directly to your account."
                 />
               </Field>
+
+              {/* Base Pricing, Purchase Cost & Profit Margin */}
+              <div className="rounded-2xl border border-purple-500/20 bg-purple-500/[0.04] p-4 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-500/20 text-purple-300">
+                      <HugeiconsIcon icon={Coins01Icon} size={15} />
+                    </span>
+                    <div>
+                      <h4 className="text-xs font-bold text-[var(--hexa-text)]">Base Pricing & Profit Margin (Single Product / Fallback)</h4>
+                      <p className="text-[11px] text-[var(--hexa-muted)]">Set sourcing cost and selling prices to monitor earnings</p>
+                    </div>
+                  </div>
+                  {Number(form.salePrice || form.regularPrice || 0) > 0 && (
+                    <div className="flex items-center gap-2">
+                      <span className={`text-[11px] font-semibold px-2.5 py-1 rounded-full border ${
+                        Number(form.salePrice || form.regularPrice || 0) - Number(form.purchasePrice || 0) >= 0
+                          ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                          : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+                      }`}>
+                        Est. Profit: {Number(form.salePrice || form.regularPrice || 0) - Number(form.purchasePrice || 0) >= 0 ? '+' : ''}৳{(Number(form.salePrice || form.regularPrice || 0) - Number(form.purchasePrice || 0)).toLocaleString()}
+                        {' '}({Math.round(((Number(form.salePrice || form.regularPrice || 0) - Number(form.purchasePrice || 0)) / Math.max(1, Number(form.salePrice || form.regularPrice || 0))) * 100)}% margin)
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-3 pt-1">
+                  <Field label="Purchase / Buy Cost (৳)">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      className="hexa-input text-xs font-medium"
+                      value={form.purchasePrice}
+                      onChange={(e) => setForm({ ...form, purchasePrice: Number(e.target.value) })}
+                      placeholder="0"
+                    />
+                  </Field>
+
+                  <Field label="Regular / List Price (৳)">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      className="hexa-input text-xs font-medium"
+                      value={form.regularPrice}
+                      onChange={(e) => setForm({ ...form, regularPrice: Number(e.target.value) })}
+                      placeholder="0"
+                    />
+                  </Field>
+
+                  <Field label="Sale / Selling Price (৳)">
+                    <input
+                      type="number"
+                      min="0"
+                      step="any"
+                      className="hexa-input text-xs font-bold text-purple-300"
+                      value={form.salePrice}
+                      onChange={(e) => setForm({ ...form, salePrice: Number(e.target.value) })}
+                      placeholder="0"
+                    />
+                  </Field>
+                </div>
+
+                {form.variants?.length > 0 && (
+                  <p className="text-[11px] text-amber-400/90 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-1.5 flex items-center gap-1.5">
+                    💡 This product currently has {form.variants.length} variant(s). You can set individual purchase costs and selling prices in <strong>Tab 2 (Variants & Pricing)</strong>.
+                  </p>
+                )}
+              </div>
 
               <div className="grid gap-4 sm:grid-cols-3 pt-2">
                 <label className="flex items-center gap-2 text-xs font-semibold cursor-pointer">
@@ -1311,6 +1612,18 @@ export default function AdminProducts() {
           </div>
         </div>
       </Modal>
+
+      {/* Stock Entry & Profit Adjustment Modal */}
+      <StockEntryModal
+        open={stockEntryModal.open}
+        onClose={() => setStockEntryModal({ open: false, product: null, variantId: null })}
+        initialProduct={stockEntryModal.product}
+        initialVariantId={stockEntryModal.variantId}
+        products={items}
+        onSuccess={() => {
+          load()
+        }}
+      />
     </>
   )
 }

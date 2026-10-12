@@ -130,17 +130,17 @@ export default function LoginPage() {
         {/* Unverified Email Warning & Resend Box                             */}
         {/* ================================================================ */}
         {unverifiedEmail && (
-          <div className="rounded-xl bg-amber-500/10 border border-amber-500/30 p-3.5 space-y-2 text-xs text-amber-200">
-            <div className="flex items-center gap-2 font-bold text-amber-300">
-              <HugeiconsIcon icon={Alert02Icon} size={16} />
+          <div className="rounded-xl bg-amber-50 border border-amber-200 p-3.5 space-y-2 text-xs text-amber-900 dark:bg-amber-500/10 dark:border-amber-500/30 dark:text-amber-200">
+            <div className="flex items-center gap-2 font-bold text-amber-800 dark:text-amber-300">
+              <HugeiconsIcon icon={Alert02Icon} size={16} className="text-amber-600 dark:text-amber-400 shrink-0" />
               <span>Email Verification Required</span>
             </div>
-            <p className="text-[11px] text-amber-200/90 leading-relaxed">
+            <p className="text-[11px] text-amber-800/90 dark:text-amber-200/90 leading-relaxed">
               Your email address has not been verified yet. Please check your inbox for the activation link.
             </p>
             {resendSuccess ? (
-              <div className="p-2 rounded bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 flex items-center gap-1.5">
-                <HugeiconsIcon icon={Tick02Icon} size={14} />
+              <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-800 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-300 flex items-center gap-1.5 font-medium">
+                <HugeiconsIcon icon={Tick02Icon} size={14} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
                 <span>{resendSuccess}</span>
               </div>
             ) : (
@@ -149,7 +149,7 @@ export default function LoginPage() {
                 onClick={handleResend}
                 disabled={resendLoading || resendCooldown > 0}
                 className="
-                  inline-flex items-center gap-1 font-bold text-amber-300 hover:text-amber-100 underline text-xs disabled:opacity-50 disabled:cursor-not-allowed
+                  inline-flex items-center gap-1 font-bold text-amber-700 hover:text-amber-900 dark:text-amber-300 dark:hover:text-amber-100 underline text-xs disabled:opacity-50 disabled:cursor-not-allowed
                 "
               >
                 {resendLoading

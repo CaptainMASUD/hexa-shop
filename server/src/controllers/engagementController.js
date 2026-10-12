@@ -12,6 +12,7 @@ import ActivityLog from '../models/ActivityLog.js';
 import Session from '../models/Session.js';
 import PaymentMethod from '../models/PaymentMethod.js';
 import ProductInteraction from '../models/ProductInteraction.js';
+import Category from '../models/Category.js';
 import { getRecommendationsForUser } from '../services/recommendationService.js';
 import { ensureAdminOperationalAlerts } from '../services/operationalAlertService.js';
 import ApiError from '../utils/ApiError.js';
@@ -20,6 +21,7 @@ import { success } from '../utils/response.js';
 import { nextSequence } from '../services/sequenceService.js';
 import { ensureExpiryNotifications, createSubscriptionsForOrder } from '../services/subscriptionService.js';
 import { decryptJson } from '../utils/encryption.js';
+import { processTicketWithAi } from '../services/aiSupportService.js';
 
 const logActivity = (req, type, extra = {}) => ActivityLog.create({ user: req.user?._id || null, type, ipAddress: req.ip, ...extra }).catch(() => {});
 
@@ -183,14 +185,34 @@ export const recommendations = asyncHandler(async (req, res) => {
   return success(res, { data });
 });
 
-export const createTicket = asyncHandler(async (req,res)=>{
-  const n=await nextSequence('ticket'); const ticketNumber=`HX-${String(n).padStart(6,'0')}`;
-  const ticket=await SupportTicket.create({ticketNumber,user:req.user._id,subject:req.body.subject,category:req.body.category||'other',priority:req.body.priority||'normal',order:req.body.orderId||null,messages:[{sender:req.user._id,message:req.body.message,isAdmin:false}]});
-  return success(res,{status:201,message:'Support ticket created',data:ticket});
+export const createTicket = asyncHandler(async (req, res) => {
+  const n = await nextSequence('ticket');
+  const ticketNumber = `HX-${String(n).padStart(6, '0')}`;
+  const ticket = await SupportTicket.create({
+    ticketNumber,
+    user: req.user._id,
+    subject: req.body.subject,
+    category: req.body.category || 'other',
+    priority: req.body.priority || 'normal',
+    order: req.body.orderId || null,
+    messages: [{ sender: req.user._id, message: req.body.message, isAdmin: false }],
+  });
+  processTicketWithAi(ticket._id).catch((err) => console.error('[createTicket AI agent error]', err.message));
+  return success(res, { status: 201, message: 'Support ticket created', data: ticket });
 });
 export const myTickets = asyncHandler(async (req,res)=>success(res,{data:await SupportTicket.find({user:req.user._id}).sort({lastReplyAt:-1}).lean()}));
 export const myTicket = asyncHandler(async (req,res)=>{ const t=await SupportTicket.findOne({_id:req.params.id,user:req.user._id}).populate('messages.sender','name role').lean(); if(!t) throw new ApiError(404,'Ticket not found'); return success(res,{data:t}); });
-export const replyTicket = asyncHandler(async (req,res)=>{ const t=await SupportTicket.findOne({_id:req.params.id,user:req.user._id}); if(!t) throw new ApiError(404,'Ticket not found'); if(['closed','resolved'].includes(t.status)) throw new ApiError(409,'Ticket is closed'); t.messages.push({sender:req.user._id,message:req.body.message,isAdmin:false}); t.lastReplyAt=new Date(); t.status='open'; await t.save(); return success(res,{message:'Reply sent',data:t}); });
+export const replyTicket = asyncHandler(async (req, res) => {
+  const t = await SupportTicket.findOne({ _id: req.params.id, user: req.user._id });
+  if (!t) throw new ApiError(404, 'Ticket not found');
+  if (['closed', 'resolved'].includes(t.status)) throw new ApiError(409, 'Ticket is closed');
+  t.messages.push({ sender: req.user._id, message: req.body.message, isAdmin: false });
+  t.lastReplyAt = new Date();
+  t.status = 'open';
+  await t.save();
+  processTicketWithAi(t._id).catch((err) => console.error('[replyTicket AI agent error]', err.message));
+  return success(res, { message: 'Reply sent', data: t });
+});
 
 export const notifications = asyncHandler(async (req,res)=>{
   await ensureExpiryNotifications(req.user._id); if(req.user.role==='admin') await ensureAdminOperationalAlerts(); const q={ $and:[{ $or:[{user:req.user._id},{audience:'all'},{audience:req.user.role==='admin'?'admin':'user',user:null}]},{ $or:[{expiresAt:null},{expiresAt:{$exists:false}},{expiresAt:{$gt:new Date()}}]} ]};
@@ -202,8 +224,8 @@ export const readAllNotifications = asyncHandler(async (req,res)=>{ await Notifi
 export const subscriptions = asyncHandler(async (req, res) => {
   const userOrders = await Order.find({
     user: req.user._id,
-    status: { $in: ['confirmed', 'processing', 'delivered'] },
-  }).select('+deliveries').lean();
+    status: { $nin: ['cancelled', 'rejected', 'refunded'] },
+  }).select('+deliveries +deliveries.encryptedPayload').lean();
 
   for (const ord of userOrders) {
     await createSubscriptionsForOrder(ord).catch(() => {});
@@ -222,7 +244,8 @@ export const subscriptions = asyncHandler(async (req, res) => {
     const order = orderMap.get(String(sub.order));
     let delivery = null;
     if (order?.deliveries?.length) {
-      const match = order.deliveries.find((d) => String(d.orderItemId) === String(sub.orderItemId));
+      const match = order.deliveries.find((d) => String(d.orderItemId) === String(sub.orderItemId))
+        || (order.deliveries.length === 1 ? order.deliveries[0] : null);
       if (match && match.encryptedPayload) {
         try {
           delivery = {
@@ -231,7 +254,9 @@ export const subscriptions = asyncHandler(async (req, res) => {
             deliveredAt: match.deliveredAt,
             details: decryptJson(match.encryptedPayload),
           };
-        } catch (e) {}
+        } catch (e) {
+          console.error('[Subscriptions] Failed to decrypt delivery details:', e.message);
+        }
       }
     }
     return {
@@ -263,7 +288,7 @@ export const activity = asyncHandler(async (req,res)=>success(res,{data:await Ac
  */
 export const chatbotContext = asyncHandler(async (req, res) => {
   const user = req.user.toPublicJSON ? req.user.toPublicJSON() : req.user;
-  const [orders, subscriptions, paymentMethods, recommendedProducts, userWithPrefs] = await Promise.all([
+  const [orders, subscriptions, paymentMethods, categories, recommendedProducts, userWithPrefs] = await Promise.all([
     Order.find({ user: req.user._id })
       .select('orderNumber total status payment.status createdAt items.productName items.quantity')
       .sort({ createdAt: -1 })

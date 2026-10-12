@@ -7,9 +7,20 @@ import { toSlug } from '../utils/slug.js';
 import { destroyImage } from '../services/cloudinaryService.js';
 import { writeAudit } from '../services/auditService.js';
 import { paginateWithCursor } from '../utils/cursorPagination.js';
+import serverCache from '../utils/cache.js';
 
 export const listCategories = asyncHandler(async (_req, res) => {
-  const categories = await Category.find({ status: 'active' }).sort({ displayOrder: 1, name: 1 }).lean();
+  const cached = serverCache.get('categories:active');
+  if (cached) {
+    return success(res, { message: 'Categories retrieved successfully', data: cached });
+  }
+
+  const categories = await Category.find({ status: 'active' })
+    .select('name slug description image displayOrder status')
+    .sort({ displayOrder: 1, name: 1 })
+    .lean();
+
+  serverCache.set('categories:active', categories, 300, ['categories', 'home']);
   return success(res, { message: 'Categories retrieved successfully', data: categories });
 });
 
@@ -36,6 +47,7 @@ export const listAdminCategories = asyncHandler(async (req, res) => {
 export const createCategory = asyncHandler(async (req, res) => {
   const payload = { ...req.body, slug: toSlug(req.body.slug || req.body.name) };
   const category = await Category.create(payload);
+  serverCache.invalidateTags(['categories', 'home']);
   await writeAudit(req, 'category_created', 'Category', category._id, { name: category.name });
   return success(res, { status: 201, message: 'Category created successfully', data: category });
 });
@@ -46,6 +58,7 @@ export const updateCategory = asyncHandler(async (req, res) => {
   const oldPublicId = existing.image?.publicId;
   Object.assign(existing, { ...req.body, slug: toSlug(req.body.slug || req.body.name) });
   await existing.save();
+  serverCache.invalidateTags(['categories', 'home']);
   if (oldPublicId && oldPublicId !== existing.image?.publicId) await destroyImage(oldPublicId);
   await writeAudit(req, 'category_updated', 'Category', existing._id, { name: existing.name });
   return success(res, { message: 'Category updated successfully', data: existing });
@@ -57,6 +70,7 @@ export const archiveCategory = asyncHandler(async (req, res) => {
   const referenced = await Product.exists({ category: category._id });
   category.status = 'archived';
   await category.save();
+  serverCache.invalidateTags(['categories', 'home']);
   await writeAudit(req, 'category_archived', 'Category', category._id, { hadProducts: Boolean(referenced) });
   return success(res, { message: 'Category archived successfully' });
 });

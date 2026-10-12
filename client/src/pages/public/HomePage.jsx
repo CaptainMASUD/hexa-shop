@@ -24,6 +24,7 @@ import {
  getProducts,
 } from '../../api/catalog.api'
 import {
+ getHomeData,
  getBundles,
  getPromotions,
  getPublicSettings,
@@ -88,36 +89,48 @@ export default function HomePage() {
  useEffect(() => {
   let mounted = true
 
-  Promise.all([
-   getCategories(),
-   getProducts({ featured: 'true', limit: 8 }),
-   getProducts({ popular: 'true', limit: 8, sort: 'popular' }),
-   getBanners(),
-   getBundles({ featured: 'true' }),
-   getPromotions(),
-   getPublicSettings(),
-  ])
-   .then(
-    ([
-     categoryResponse,
-     featuredResponse,
-     popularResponse,
-     bannerResponse,
-     bundleResponse,
-     promotionResponse,
-     publicSettings,
-    ]) => {
-     if (!mounted) return
+  getHomeData()
+   .then((homeData) => {
+    if (!mounted || !homeData) return
+    setCategories(homeData.categories || [])
+    setFeatured(homeData.featured || [])
+    setPopular(homeData.popular || [])
+    setBanners(homeData.banners || [])
+    setBundles(homeData.bundles || [])
+    setPromotions(homeData.promotions || [])
+    setSettings(homeData.settings || null)
+   })
+   .catch(() => {
+    return Promise.all([
+     getCategories(),
+     getProducts({ featured: 'true', limit: 8 }),
+     getProducts({ popular: 'true', limit: 8, sort: 'popular' }),
+     getBanners(),
+     getBundles({ featured: 'true' }),
+     getPromotions(),
+     getPublicSettings(),
+    ]).then(
+     ([
+      categoryResponse,
+      featuredResponse,
+      popularResponse,
+      bannerResponse,
+      bundleResponse,
+      promotionResponse,
+      publicSettings,
+     ]) => {
+      if (!mounted) return
 
-     setCategories(categoryResponse || [])
-     setFeatured(featuredResponse?.data || [])
-     setPopular(popularResponse?.data || [])
-     setBanners(bannerResponse || [])
-     setBundles(bundleResponse || [])
-     setPromotions(promotionResponse || [])
-     setSettings(publicSettings || null)
-    }
-   )
+      setCategories(categoryResponse || [])
+      setFeatured(featuredResponse?.data || [])
+      setPopular(popularResponse?.data || [])
+      setBanners(bannerResponse || [])
+      setBundles(bundleResponse || [])
+      setPromotions(promotionResponse || [])
+      setSettings(publicSettings || null)
+     }
+    )
+   })
    .catch(() => {})
    .finally(() => {
     if (mounted) setLoading(false)

@@ -72,7 +72,7 @@ const timelineSchema = new mongoose.Schema({
 const deliverySchema = new mongoose.Schema({
   orderItemId: { type: mongoose.Schema.Types.ObjectId, required: true },
   summary: { type: String, default: 'Digital delivery' },
-  encryptedPayload: { type: String, required: true, select: false },
+  encryptedPayload: { type: String, required: true },
   deliveredAt: { type: Date, default: Date.now },
   deliveredBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
 }, { _id: true });

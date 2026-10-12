@@ -5,8 +5,15 @@ import { success } from '../utils/response.js';
 import { destroyImage } from '../services/cloudinaryService.js';
 import { writeAudit } from '../services/auditService.js';
 import { paginateWithCursor } from '../utils/cursorPagination.js';
+import serverCache from '../utils/cache.js';
 
 export const listBanners = asyncHandler(async (req, res) => {
+  const cacheKey = `banners:${req.query.placement || 'all'}`;
+  const cached = serverCache.get(cacheKey);
+  if (cached) {
+    return success(res, { data: cached });
+  }
+
   const now = new Date();
   const filter = {
     active: true,
@@ -27,7 +34,12 @@ export const listBanners = asyncHandler(async (req, res) => {
     }
   }
 
-  const data = await Banner.find(filter).sort({ displayOrder: 1, createdAt: -1 }).lean();
+  const data = await Banner.find(filter)
+    .select('title subtitle image mobileImage buttonText buttonLink badge placement targetType targetId displayOrder')
+    .sort({ displayOrder: 1, createdAt: -1 })
+    .lean();
+
+  serverCache.set(cacheKey, data, 300, ['banners', 'home']);
   return success(res, { data });
 });
 
@@ -63,6 +75,7 @@ export const listAdminBanners = asyncHandler(async (req, res) => {
 
 export const createBanner = asyncHandler(async (req, res) => {
   const banner = await Banner.create(req.body);
+  serverCache.invalidateTags(['banners', 'home']);
   await writeAudit(req, 'banner_created', 'Banner', banner._id, { title: banner.title });
   return success(res, { status: 201, message: 'Banner created', data: banner });
 });
@@ -73,6 +86,7 @@ export const updateBanner = asyncHandler(async (req, res) => {
   const oldImage = banner.image?.publicId;
   Object.assign(banner, req.body);
   await banner.save();
+  serverCache.invalidateTags(['banners', 'home']);
   if (oldImage && oldImage !== banner.image?.publicId) await destroyImage(oldImage);
   await writeAudit(req, 'banner_updated', 'Banner', banner._id, { title: banner.title });
   return success(res, { message: 'Banner updated', data: banner });
@@ -83,6 +97,7 @@ export const archiveBanner = asyncHandler(async (req, res) => {
   if (!banner) throw new ApiError(404, 'Banner not found');
   banner.active = false;
   await banner.save();
+  serverCache.invalidateTags(['banners', 'home']);
   await writeAudit(req, 'banner_disabled', 'Banner', banner._id, { title: banner.title });
   return success(res, { message: 'Banner disabled' });
 });

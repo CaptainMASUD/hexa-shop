@@ -14,12 +14,12 @@ import { HugeiconsIcon } from '@hugeicons/react'
 
 import {
   ArrowDown01Icon,
+  BellIcon,
   Cancel01Icon,
   FavouriteIcon,
   Logout01Icon,
   Menu01Icon,
   Moon02Icon,
-  Notification03Icon,
   Search01Icon,
   ShoppingBag01Icon,
   Sun03Icon,
@@ -673,9 +673,9 @@ export default function Header() {
                 label="Notifications"
                 active={noticeOpen}
               >
-                <UIIcon
+                <HugeiconsIcon
                   icon={
-                    Notification03Icon
+                    BellIcon
                   }
                   size={21}
                 />
@@ -876,6 +876,9 @@ export default function Header() {
                     src={user.avatar.url}
                     alt={user.name}
                     className="h-5 w-5 rounded-full object-cover shrink-0 ring-1 ring-purple-500/30"
+                    crossOrigin="anonymous"
+                    referrerPolicy="no-referrer"
+                    loading="lazy"
                   />
                 ) : (
                   <UIIcon
@@ -1750,6 +1753,9 @@ function ProfileDropdown({
                 src={user.avatar.url}
                 alt={user.name}
                 className="h-full w-full object-cover"
+                crossOrigin="anonymous"
+                referrerPolicy="no-referrer"
+                loading="lazy"
               />
             ) : (
               <UIIcon
@@ -2160,9 +2166,9 @@ function NotificationDropdown({
                 text-purple-600
               "
             >
-              <UIIcon
+              <HugeiconsIcon
                 icon={
-                  Notification03Icon
+                  BellIcon
                 }
                 size={20}
               />

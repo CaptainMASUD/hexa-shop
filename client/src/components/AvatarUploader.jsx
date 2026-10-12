@@ -70,6 +70,9 @@ export default function AvatarUploader({ size = 'lg', onUploaded }) {
               src={user.avatar.url}
               alt={user.name || 'User avatar'}
               className="h-full w-full object-cover"
+              crossOrigin="anonymous"
+              referrerPolicy="no-referrer"
+              loading="lazy"
             />
           ) : (
             <span>{user?.name ? user.name.charAt(0).toUpperCase() : <HugeiconsIcon icon={UserIcon} size={24} />}</span>

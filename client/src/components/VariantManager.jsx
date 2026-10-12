@@ -58,6 +58,7 @@ export default function VariantManager({ variants = [], onChange }) {
       regularPrice: 0,
       discountPercent: 0,
       salePrice: 0,
+      purchasePrice: 0,
       costPrice: 0,
       stock: 100,
       unlimitedStock: false,
@@ -90,6 +91,12 @@ export default function VariantManager({ variants = [], onChange }) {
       if (i !== index) return v
       const item = { ...v, [field]: value }
 
+      if (field === 'purchasePrice') {
+        item.costPrice = value
+      } else if (field === 'costPrice') {
+        item.purchasePrice = value
+      }
+
       if (field === 'regularPrice' || field === 'discountPercent') {
         const reg = Number(field === 'regularPrice' ? value : item.regularPrice || 0)
         const disc = Number(field === 'discountPercent' ? value : item.discountPercent || 0)
@@ -117,6 +124,7 @@ export default function VariantManager({ variants = [], onChange }) {
       const reg = Number(t.regularPrice || 0)
       const sale = Number(t.salePrice || reg)
       const disc = reg > 0 && sale < reg ? Math.round(((reg - sale) / reg) * 100) : 0
+      const cost = Number(t.costPrice || 0)
       return {
         name: t.name,
         duration: t.duration || '',
@@ -126,7 +134,8 @@ export default function VariantManager({ variants = [], onChange }) {
         regularPrice: reg,
         salePrice: sale,
         discountPercent: disc,
-        costPrice: Number(t.costPrice || 0),
+        purchasePrice: cost,
+        costPrice: cost,
         stock: Number(t.stock || 100),
         unlimitedStock: Boolean(t.unlimitedStock),
         sortOrder: idx,
@@ -305,15 +314,35 @@ export default function VariantManager({ variants = [], onChange }) {
                 </div>
 
                 <div className="sm:col-span-2">
-                  <label className="text-[10px] font-bold uppercase text-[var(--hexa-muted)]">Cost (৳)</label>
+                  <label className="text-[10px] font-bold uppercase text-amber-400">Buy Cost (৳)</label>
                   <input
                     type="number"
                     min="0"
                     placeholder="0"
-                    className="hexa-input mt-1 text-xs"
-                    value={v.costPrice || ''}
-                    onChange={(e) => updateField(i, 'costPrice', e.target.value)}
+                    className="hexa-input mt-1 text-xs text-amber-300 font-semibold"
+                    value={v.purchasePrice !== undefined && v.purchasePrice !== '' ? v.purchasePrice : (v.costPrice || '')}
+                    onChange={(e) => updateField(i, 'purchasePrice', e.target.value)}
                   />
+                  {Number(v.purchasePrice || v.costPrice || 0) > 0 && (
+                    <span
+                      className={`block mt-1 text-[9px] font-bold ${
+                        (Number(v.salePrice || v.regularPrice || 0) - Number(v.purchasePrice || v.costPrice || 0)) >= 0
+                          ? 'text-emerald-400'
+                          : 'text-rose-400'
+                      }`}
+                      title="Estimated gross profit & margin per unit"
+                    >
+                      {(Number(v.salePrice || v.regularPrice || 0) - Number(v.purchasePrice || v.costPrice || 0)) >= 0
+                        ? `+৳${Number(v.salePrice || v.regularPrice || 0) - Number(v.purchasePrice || v.costPrice || 0)}`
+                        : `-৳${Math.abs(Number(v.salePrice || v.regularPrice || 0) - Number(v.purchasePrice || v.costPrice || 0))}`
+                      }
+                      {Number(v.salePrice || v.regularPrice || 0) > 0 && (
+                        <span className="opacity-80 ml-0.5">
+                          ({Math.round(((Number(v.salePrice || v.regularPrice || 0) - Number(v.purchasePrice || v.costPrice || 0)) / Number(v.salePrice || v.regularPrice || 0)) * 100)}%)
+                        </span>
+                      )}
+                    </span>
+                  )}
                 </div>
 
                 <div className="sm:col-span-2">

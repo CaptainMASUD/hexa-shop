@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     hexa_api_timeout_seconds: float = Field(default=5.0, ge=1.0, le=30.0, validation_alias="HEXA_API_TIMEOUT_SECONDS")
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(".env", "hexa-ai/.env"),
         env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,

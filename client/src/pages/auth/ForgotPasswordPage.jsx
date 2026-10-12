@@ -66,15 +66,15 @@ export default function ForgotPasswordPage() {
       <form onSubmit={submit} className="space-y-4">
         {/* Success / Instructions Banner */}
         {submitted && successMessage && (
-          <div className="rounded-xl bg-emerald-500/10 border border-emerald-500/30 p-4 space-y-2 text-xs text-emerald-200">
-            <div className="flex items-center gap-2 font-bold text-emerald-300">
-              <HugeiconsIcon icon={Tick02Icon} size={16} />
+          <div className="rounded-xl bg-emerald-50 border border-emerald-200 text-xs p-4 space-y-2 text-emerald-900 dark:bg-emerald-500/10 dark:border-emerald-500/30 dark:text-emerald-200">
+            <div className="flex items-center gap-2 font-bold text-emerald-800 dark:text-emerald-300">
+              <HugeiconsIcon icon={Tick02Icon} size={16} className="text-emerald-600 dark:text-emerald-400 shrink-0" />
               <span>Check Your Inbox</span>
             </div>
-            <p className="text-[11px] text-emerald-200/90 leading-relaxed">
+            <p className="text-[12px] font-medium text-emerald-800/95 dark:text-emerald-200/90 leading-relaxed">
               {successMessage}
             </p>
-            <p className="text-[10px] text-emerald-300/80">
+            <p className="text-[11px] text-emerald-700/85 dark:text-emerald-300/80">
               Please check your spam or promotions folder if you do not see the email within a few minutes.
             </p>
           </div>

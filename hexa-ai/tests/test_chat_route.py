@@ -19,13 +19,17 @@ class FakeGeminiService:
 
 
 class FakeContextService:
-    def __init__(self, context=None):
+    def __init__(self, context=None, recommendations=None):
         self.context = context
+        self.recommendations = recommendations or []
         self.auth_headers = []
 
     async def fetch_account_context(self, authorization):
         self.auth_headers.append(authorization)
         return self.context
+
+    async def fetch_recommendations(self, **kwargs):
+        return self.recommendations
 
 
 def make_settings(**overrides):
@@ -63,6 +67,7 @@ def test_chat_returns_gemini_reply_and_passes_runtime_context():
         "success": True,
         "message": "Your wallet balance is available in Account → Wallet.",
         "model": "gemini-test",
+        "products": [],
     }
     assert context.auth_headers == ["Bearer test-token"]
     runtime_context = gemini.calls[0][2]

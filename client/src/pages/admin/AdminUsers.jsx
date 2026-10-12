@@ -158,21 +158,35 @@ function UsersTab() {
     }
   }
 
-  const assignRole = async (item) => {
-    const menu = roles.map((r, i) => `${i + 1}. ${r.name}`).join('\n')
-    const n = Number(prompt(`Choose role number for ${item.name}:\n0. Clear custom role\n${menu}`))
-    if (Number.isNaN(n)) return
-    const selected = n > 0 ? roles[n - 1] : null
+  const [roleModalUser, setRoleModalUser] = useState(null)
+  const [roleModalRoleId, setRoleModalRoleId] = useState('')
+  const [roleModalBaseRole, setRoleModalBaseRole] = useState('user')
+  const [roleModalSaving, setRoleModalSaving] = useState(false)
+
+  const openAssignRoleModal = (item) => {
+    setRoleModalUser(item)
+    setRoleModalRoleId(item.roleRef?._id || item.roleRef || '')
+    setRoleModalBaseRole(item.role || 'user')
+  }
+
+  const handleSaveRole = async (e) => {
+    e.preventDefault()
+    if (!roleModalUser) return
+    setRoleModalSaving(true)
     try {
-      await adminPatch(`/features/users/${item._id}/role`, {
+      const selected = roles.find((r) => r._id === roleModalRoleId)
+      await adminPatch(`/features/users/${roleModalUser._id}/role`, {
         roleId: selected?._id || null,
         permissions: selected?.permissions || [],
-        baseRole: item.role,
+        baseRole: roleModalBaseRole,
       })
-      notify('User role updated')
+      notify('User role and access permissions updated', 'success')
+      setRoleModalUser(null)
       load(null, 'next', limit, q, roleFilter, activeFilter)
-    } catch (e) {
-      notify(apiErrorMessage(e), 'error')
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
+    } finally {
+      setRoleModalSaving(false)
     }
   }
 
@@ -306,7 +320,7 @@ function UsersTab() {
                         </button>
                         <button
                           type="button"
-                          onClick={() => assignRole(item)}
+                          onClick={() => openAssignRoleModal(item)}
                           className="rounded px-2 py-1 text-xs font-semibold text-gray-400 hover:bg-white/5 transition"
                           title="Assign Staff Role"
                         >
@@ -391,6 +405,87 @@ function UsersTab() {
               </button>
             </div>
           </div>
+        )}
+      </Modal>
+
+      {/* Role Assignment Modal */}
+      <Modal
+        open={Boolean(roleModalUser)}
+        onClose={() => setRoleModalUser(null)}
+        title={`Assign Role & Permissions: ${roleModalUser?.name || ''}`}
+        maxWidth="max-w-lg"
+      >
+        {roleModalUser && (
+          <form onSubmit={handleSaveRole} className="space-y-4 text-xs">
+            <div className="rounded-lg bg-[var(--hexa-surface)] p-3 border border-[var(--hexa-border)] space-y-1">
+              <p className="text-[var(--hexa-muted)]">User: <span className="font-semibold text-white">{roleModalUser.name}</span> ({roleModalUser.email})</p>
+              <p className="text-[var(--hexa-muted)]">Current Role: <span className="font-semibold capitalize text-purple-400">{roleModalUser.role}</span></p>
+            </div>
+
+            <div>
+              <label className="block text-[var(--hexa-muted)] mb-1 font-medium">Base Role</label>
+              <select
+                className="hexa-input w-full text-xs"
+                value={roleModalBaseRole}
+                onChange={(e) => setRoleModalBaseRole(e.target.value)}
+              >
+                <option value="user">Customer / Regular User</option>
+                <option value="admin">Administrator / Staff</option>
+              </select>
+              <p className="mt-1 text-[11px] text-[var(--hexa-muted)]">
+                {roleModalBaseRole === 'admin'
+                  ? 'Grants access to the Admin Panel. Assign custom permissions below if needed.'
+                  : 'Customer accounts cannot access the admin panel.'}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-[var(--hexa-muted)] mb-1 font-medium">Custom Staff Role Profile</label>
+              <select
+                className="hexa-input w-full text-xs"
+                value={roleModalRoleId}
+                onChange={(e) => setRoleModalRoleId(e.target.value)}
+              >
+                <option value="">No Custom Profile (Standard Role)</option>
+                {roles.map((r) => (
+                  <option key={r._id} value={r._id}>
+                    {r.name} ({r.permissions?.length || 0} permissions)
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {roleModalRoleId && (
+              <div className="rounded-lg bg-black/20 p-3 border border-white/5 space-y-2">
+                <p className="text-[11px] font-semibold text-purple-300">Included Permissions Preview:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {roles.find((r) => r._id === roleModalRoleId)?.permissions?.map((p) => (
+                    <span key={p} className="px-2 py-0.5 rounded text-[10px] bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                      {p}
+                    </span>
+                  )) || <span className="text-[11px] text-gray-500">None specified</span>}
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--hexa-border)]">
+              <button
+                type="button"
+                onClick={() => setRoleModalUser(null)}
+                className="hexa-btn-secondary text-xs"
+                disabled={roleModalSaving}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="hexa-btn text-xs !bg-purple-600 hover:!bg-purple-500"
+                disabled={roleModalSaving}
+              >
+                {roleModalSaving ? 'Saving...' : 'Update Role'}
+              </button>
+            </div>
+          </form>
         )}
       </Modal>
     </>

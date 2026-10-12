@@ -34,6 +34,7 @@ const AdminWallet = lazy(() => import('./pages/admin/AdminWallet'))
 const AdminReports = lazy(() => import('./pages/admin/AdminReports'))
 const AdminAudit = lazy(() => import('./pages/admin/AdminAudit'))
 const AdminGrowthFeatures = lazy(() => import('./pages/admin/AdminGrowthFeatures'))
+const AdminSubscriptions = lazy(() => import('./pages/admin/AdminSubscriptions'))
 const NotFoundPage = lazy(() => import('./pages/public/NotFoundPage'))
 
 export default function App() {
@@ -77,6 +78,7 @@ export default function App() {
         <Route path="categories" element={<AdminCategories />} />
         <Route path="inventory" element={<AdminInventory />} />
         <Route path="orders" element={<AdminOrders />} />
+        <Route path="subscriptions" element={<AdminSubscriptions />} />
         <Route path="payment-methods" element={<AdminPaymentMethods />} />
         <Route path="banners" element={<AdminBanners />} />
         <Route path="wallet" element={<AdminWallet />} />

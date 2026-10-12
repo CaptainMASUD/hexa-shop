@@ -5,6 +5,8 @@ import Subscription from '../models/Subscription.js';
 import ProductInteraction from '../models/ProductInteraction.js';
 import Category from '../models/Category.js';
 
+const RECOMMENDATION_FIELDS = 'name slug brand tags thumbnail galleryImages regularPrice salePrice currency productType popular featured ratingAverage reviewCount stock allowUnlimitedStock lowStockThreshold variants category soldQuantity createdAt';
+
 /**
  * Deterministic recommendation and product search scoring engine based on real user behavior & active product catalog.
  */
@@ -126,7 +128,10 @@ export async function getRecommendationsForUser(userId = null, options = {}) {
   }
 
   const candidateProducts = await Product.find(query)
+    .select(RECOMMENDATION_FIELDS)
     .populate('category', 'name slug')
+    .sort({ popular: -1, ratingAverage: -1, soldQuantity: -1, createdAt: -1 })
+    .limit(Math.max(50, limit * 10))
     .lean({ virtuals: true });
 
   // 7. Score & Rank Each Product
@@ -264,6 +269,7 @@ async function getAnonymousRecommendations(options = {}, limit = 5, excludeIds =
   }
 
   const products = await Product.find(query)
+    .select(RECOMMENDATION_FIELDS)
     .populate('category', 'name slug')
     .sort({ popular: -1, ratingAverage: -1, soldQuantity: -1, createdAt: -1 })
     .limit(limit * 3)

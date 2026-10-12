@@ -182,8 +182,8 @@ export default function VerifyEmailPage() {
               </p>
 
               {resendSuccessMessage ? (
-                <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 flex items-center gap-2">
-                  <HugeiconsIcon icon={Tick02Icon} size={16} className="shrink-0" />
+                <div className="p-3 rounded-lg bg-emerald-50 border border-emerald-200 text-xs text-emerald-800 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-300 flex items-center gap-2 font-medium">
+                  <HugeiconsIcon icon={Tick02Icon} size={16} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
                   <span>{resendSuccessMessage}</span>
                 </div>
               ) : (

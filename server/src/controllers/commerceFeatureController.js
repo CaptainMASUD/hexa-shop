@@ -3,6 +3,9 @@ import Promotion from '../models/Promotion.js';
 import Coupon from '../models/Coupon.js';
 import Order from '../models/Order.js';
 import User from '../models/User.js';
+import Product from '../models/Product.js';
+import Category from '../models/Category.js';
+import Banner from '../models/Banner.js';
 import AffiliatePayout from '../models/AffiliatePayout.js';
 import WalletTransaction from '../models/WalletTransaction.js';
 import ApiError from '../utils/ApiError.js';
@@ -10,6 +13,8 @@ import asyncHandler from '../utils/asyncHandler.js';
 import { success } from '../utils/response.js';
 import { getSettings } from '../services/settingsService.js';
 import { buildCartSnapshot, evaluateCoupon, prepareOrder } from '../services/orderService.js';
+import { PRODUCT_CARD_FIELDS } from './productController.js';
+import serverCache from '../utils/cache.js';
 
 const activeWindow = () => ({
   $and: [
@@ -18,27 +23,119 @@ const activeWindow = () => ({
   ],
 });
 
+export const homeData = asyncHandler(async (_req, res) => {
+  const cacheKey = 'commerce:home';
+  const cached = serverCache.get(cacheKey);
+  if (cached) {
+    return success(res, { data: cached });
+  }
+
+  const [
+    categories,
+    featured,
+    popular,
+    banners,
+    bundleRows,
+    promotionList,
+    settingsDoc,
+  ] = await Promise.all([
+    Category.find({ status: 'active' })
+      .select('name slug image description icon displayOrder')
+      .sort({ displayOrder: 1, name: 1 })
+      .lean(),
+    Product.find({ status: 'active', featured: true })
+      .select(PRODUCT_CARD_FIELDS)
+      .sort({ createdAt: -1 })
+      .limit(8)
+      .lean(),
+    Product.find({ status: 'active', popular: true })
+      .select(PRODUCT_CARD_FIELDS)
+      .sort({ totalSales: -1, viewsCount: -1, createdAt: -1 })
+      .limit(8)
+      .lean(),
+    Banner.find({ active: true, ...activeWindow() })
+      .select('title subtitle image link buttonText placement displayOrder active startsAt endsAt')
+      .sort({ displayOrder: 1, createdAt: -1 })
+      .lean(),
+    Bundle.find({ status: 'active', deletedAt: null, featured: true, ...activeWindow() })
+      .populate({ path: 'items.product', select: 'name slug thumbnail regularPrice salePrice variants status productType' })
+      .sort({ featured: -1, createdAt: -1 })
+      .limit(30)
+      .lean(),
+    Promotion.find({ active: true, deletedAt: null, ...activeWindow() })
+      .populate('products', 'name slug thumbnail regularPrice salePrice')
+      .populate('categories', 'name slug image')
+      .populate('bundles', 'name slug image regularPrice salePrice')
+      .populate('bundle', 'name slug image regularPrice salePrice')
+      .sort({ displayOrder: 1, createdAt: -1 })
+      .lean(),
+    getSettings(),
+  ]);
+
+  const bundles = bundleRows.filter((entry) => (entry.items || []).length > 1 && entry.items.every((item) => item.product && item.product.status === 'active'));
+
+  const settings = settingsDoc ? (typeof settingsDoc.toObject === 'function' ? settingsDoc.toObject() : { ...settingsDoc }) : {
+    currencies: [{ code: 'BDT', symbol: '৳', rateFromBDT: 1, active: true }, { code: 'USD', symbol: '$', rateFromBDT: 0.0082, active: true }],
+    faq: [],
+  };
+  if (settings.webhooks) delete settings.webhooks;
+
+  const result = {
+    categories,
+    featured,
+    popular,
+    banners,
+    bundles,
+    promotions: promotionList,
+    settings,
+  };
+
+  serverCache.set(cacheKey, result, 5 * 60 * 1000, ['home']);
+  return success(res, { data: result });
+});
+
 export const bundles = asyncHandler(async (req, res) => {
+  const isFeatured = req.query.featured === 'true';
+  const cacheKey = `bundles:list:${isFeatured}`;
+  const cached = serverCache.get(cacheKey);
+  if (cached) {
+    return success(res, { data: cached });
+  }
+
   const filter = { status: 'active', deletedAt: null, ...activeWindow() };
-  if (req.query.featured === 'true') filter.featured = true;
+  if (isFeatured) filter.featured = true;
   const rows = await Bundle.find(filter)
     .populate({ path: 'items.product', select: 'name slug thumbnail regularPrice salePrice variants status productType' })
     .sort({ featured: -1, createdAt: -1 })
     .limit(30)
     .lean();
   const data = rows.filter((entry) => (entry.items || []).length > 1 && entry.items.every((item) => item.product && item.product.status === 'active'));
+  serverCache.set(cacheKey, data, 5 * 60 * 1000, ['bundles']);
   return success(res, { data });
 });
 
 export const bundle = asyncHandler(async (req, res) => {
+  const cacheKey = `bundles:slug:${req.params.slug}`;
+  const cached = serverCache.get(cacheKey);
+  if (cached) {
+    return success(res, { data: cached });
+  }
+
   const data = await Bundle.findOne({ slug: req.params.slug, status: 'active', deletedAt: null, ...activeWindow() })
     .populate({ path: 'items.product', populate: { path: 'category', select: 'name slug' } })
     .lean();
   if (!data || !(data.items || []).every((item) => item.product && item.product.status === 'active')) throw new ApiError(404, 'Bundle not found');
+  serverCache.set(cacheKey, data, 5 * 60 * 1000, ['bundles']);
   return success(res, { data });
 });
 
 export const promotions = asyncHandler(async (_req, res) => {
+  const cacheKey = 'promotions:list';
+  const cached = serverCache.get(cacheKey);
+  if (cached) {
+    return success(res, { data: cached });
+  }
+
   const data = await Promotion.find({ active: true, deletedAt: null, ...activeWindow() })
     .populate('products', 'name slug thumbnail regularPrice salePrice')
     .populate('categories', 'name slug image')
@@ -46,6 +143,7 @@ export const promotions = asyncHandler(async (_req, res) => {
     .populate('bundle', 'name slug image regularPrice salePrice')
     .sort({ displayOrder: 1, createdAt: -1 })
     .lean();
+  serverCache.set(cacheKey, data, 5 * 60 * 1000, ['promotions']);
   return success(res, { data });
 });
 

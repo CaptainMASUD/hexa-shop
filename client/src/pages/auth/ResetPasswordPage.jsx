@@ -126,11 +126,11 @@ export default function ResetPasswordPage() {
         subtitle="Your password has been updated securely."
       >
         <div className="space-y-5 text-center">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-600 dark:bg-emerald-500/10 dark:text-emerald-400 dark:border-emerald-500/20">
             <HugeiconsIcon icon={CheckmarkCircle02Icon} size={28} />
           </div>
           <div className="space-y-1">
-            <p className="text-sm font-semibold text-emerald-300">
+            <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
               All set! You can now log in with your new password.
             </p>
             <p className="text-xs text-[var(--hexa-muted)]">

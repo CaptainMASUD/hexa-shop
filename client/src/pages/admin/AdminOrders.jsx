@@ -7,6 +7,7 @@ import {
   Edit02Icon,
   GameController01Icon,
   GiftIcon,
+  Invoice01Icon,
   Key01Icon,
   PackageIcon,
   PlusSignIcon,
@@ -201,7 +202,97 @@ export default function AdminOrders() {
   const [note, setNote] = useState('')
   const [availableInventory, setAvailableInventory] = useState([])
   const [delivery, setDelivery] = useState(defaultDeliveryState)
+  const [invoiceOrder, setInvoiceOrder] = useState(null)
+  const [invoiceLoading, setInvoiceLoading] = useState(false)
   const { notify } = useToast()
+
+  const openInvoice = async (orderOrId) => {
+    try {
+      const orderId = typeof orderOrId === 'object' ? orderOrId._id : orderOrId
+      if (typeof orderOrId === 'object' && orderOrId.items?.length && orderOrId.payment) {
+        setInvoiceOrder(orderOrId)
+        return
+      }
+      setInvoiceLoading(true)
+      const res = await adminGet(`/orders/${orderId}`)
+      setInvoiceOrder(res.data)
+    } catch (err) {
+      notify(apiErrorMessage(err, 'Failed to load invoice details'), 'error')
+    } finally {
+      setInvoiceLoading(false)
+    }
+  }
+
+  const exportOrdersCsv = () => {
+    if (!items.length) {
+      notify('No orders available to export', 'error')
+      return
+    }
+
+    const headers = [
+      'Order Number',
+      'Placed At',
+      'Customer Name',
+      'Customer Email',
+      'Customer Phone',
+      'Items Count',
+      'Items Description',
+      'Subtotal (BDT)',
+      'Discount (BDT)',
+      'Total (BDT)',
+      'Payment Method',
+      'Payment Status',
+      'Trx ID',
+      'Sender Number',
+      'Fulfillment Status',
+    ]
+
+    const rows = items.map((o) => {
+      const itemsDesc = (o.items || [])
+        .map((i) => `${i.productName || 'Item'}${i.variantName ? ` (${i.variantName})` : ''} x${i.quantity}`)
+        .join('; ')
+      const totalDiscount =
+        Number(o.coupon?.discount || 0) +
+        Number(o.promotion?.discount || 0) +
+        Number(o.walletApplied || 0)
+
+      return [
+        o.orderNumber || '',
+        o.createdAt ? new Date(o.createdAt).toLocaleString() : '',
+        o.customer?.name || '',
+        o.customer?.email || '',
+        o.customer?.phone || '',
+        o.items?.length || 0,
+        itemsDesc,
+        o.subtotal || 0,
+        totalDiscount,
+        o.total || 0,
+        o.payment?.methodName || '',
+        o.payment?.status || '',
+        o.payment?.transactionId || '',
+        o.payment?.senderNumber || '',
+        o.status || '',
+      ]
+    })
+
+    const csvContent = [
+      headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(','),
+      ...rows.map((row) =>
+        row.map((val) => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')
+      ),
+    ].join('\r\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `hexa_orders_${new Date().toISOString().slice(0, 10)}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    notify(`Exported ${items.length} orders to CSV`, 'success')
+  }
 
   const load = async (
     cursor = null,
@@ -583,6 +674,14 @@ export default function AdminOrders() {
               Reset
             </button>
           )}
+          <button
+            type="button"
+            onClick={exportOrdersCsv}
+            className="hexa-btn-secondary !px-3 !py-2.5 text-xs flex items-center gap-1.5"
+            title="Export filtered orders to CSV"
+          >
+            <HugeiconsIcon icon={Copy01Icon} size={14} /> Export CSV
+          </button>
         </div>
       </form>
 
@@ -594,7 +693,7 @@ export default function AdminOrders() {
         )}
         <table className="w-full min-w-[1000px] text-left text-sm">
           <thead className="border-b border-[var(--hexa-border)] text-xs text-[var(--hexa-muted)]">
-            <tr>{['Order', 'Customer', 'Payment', 'Transaction', 'Total', 'Status', 'Placed', 'View'].map((header) => <th key={header} className="px-5 py-4">{header}</th>)}</tr>
+            <tr>{['Order', 'Customer', 'Payment', 'Transaction', 'Total', 'Status', 'Placed', 'Actions'].map((header) => <th key={header} className="px-5 py-4">{header}</th>)}</tr>
           </thead>
           <tbody>
             {items.length ? (
@@ -607,7 +706,26 @@ export default function AdminOrders() {
                   <td className="px-5 py-4 font-semibold">৳{Number(order.total || 0).toLocaleString()}</td>
                   <td className="px-5 py-4"><StatusBadge value={order.status} /></td>
                   <td className="px-5 py-4 text-xs text-[var(--hexa-muted)]">{new Date(order.createdAt).toLocaleString()}</td>
-                  <td className="px-5 py-4"><button type="button" onClick={() => inspect(order._id)} className="rounded-lg p-2 text-purple-600 hover:bg-purple-500/[0.08]"><HugeiconsIcon icon={ViewIcon} size={16} /></button></td>
+                  <td className="px-5 py-4">
+                    <div className="flex items-center gap-1">
+                      <button
+                        type="button"
+                        onClick={() => inspect(order._id)}
+                        className="rounded-lg p-2 text-purple-400 hover:bg-purple-500/10 transition"
+                        title="View & Fulfill Order"
+                      >
+                        <HugeiconsIcon icon={ViewIcon} size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openInvoice(order)}
+                        className="rounded-lg p-2 text-sky-400 hover:bg-sky-500/10 transition"
+                        title="View / Print Invoice"
+                      >
+                        <HugeiconsIcon icon={Invoice01Icon} size={16} />
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))
             ) : (
@@ -634,6 +752,21 @@ export default function AdminOrders() {
       <Modal open={open} onClose={() => setOpen(false)} title={selected?.orderNumber || 'Order'} maxWidth="max-w-6xl">
         {selected && (
           <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-[var(--hexa-border)]">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-[var(--hexa-muted)]">Order Placed: {new Date(selected.createdAt).toLocaleString()}</span>
+                <StatusBadge value={selected.status} />
+              </div>
+              <button
+                type="button"
+                onClick={() => openInvoice(selected)}
+                className="hexa-btn-secondary text-xs flex items-center gap-1.5 !py-1.5"
+                title="View & Print Official Invoice"
+              >
+                <HugeiconsIcon icon={Invoice01Icon} size={14} /> Printable Invoice
+              </button>
+            </div>
+
             <div className="grid gap-4 sm:grid-cols-4">
               <div className="rounded-xl border border-[var(--hexa-border)] p-4 text-xs">
                 <span className="font-semibold text-[var(--hexa-muted)] block mb-1.5 uppercase tracking-wider text-[10px]">Customer</span>
@@ -892,14 +1025,38 @@ export default function AdminOrders() {
                 </div>
 
                 {currentDelivered && (
-                  <div className="mt-3.5 rounded-xl border border-purple-500/30 bg-purple-500/10 p-3 text-xs text-purple-200 flex items-start gap-2">
-                    <HugeiconsIcon icon={Edit02Icon} size={16} className="shrink-0 mt-0.5 text-purple-400" />
-                    <div>
-                      <p className="font-semibold text-purple-300">Previously Delivered Credentials Loaded</p>
-                      <p className="mt-0.5 text-purple-200/80">
-                        Editing the fields below will immediately update the delivered credentials in the customer&apos;s account.
-                      </p>
+                  <div className="mt-3.5 rounded-xl border border-purple-500/30 bg-purple-500/10 p-3 text-xs text-purple-200 flex items-start justify-between gap-3">
+                    <div className="flex items-start gap-2">
+                      <HugeiconsIcon icon={Edit02Icon} size={16} className="shrink-0 mt-0.5 text-purple-400" />
+                      <div>
+                        <p className="font-semibold text-purple-300">Previously Delivered Credentials Loaded</p>
+                        <p className="mt-0.5 text-purple-200/80">
+                          Editing the fields below will immediately update the delivered credentials in the customer&apos;s account.
+                        </p>
+                      </div>
                     </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDelivery((prev) => ({
+                          ...prev,
+                          email: '',
+                          password: '',
+                          licenseKey: '',
+                          activationCode: '',
+                          pin: '',
+                          referenceId: '',
+                          customText: '',
+                          inventoryItemIds: [],
+                          instructions: 'Replacement credential issued by store admin.',
+                        }))
+                        notify('Form cleared for issuing replacement credentials. Enter fresh details or choose Vault and click Deliver Credentials.')
+                      }}
+                      className="shrink-0 rounded-lg bg-purple-600/30 hover:bg-purple-600/50 border border-purple-400/40 px-2.5 py-1 text-xs font-semibold text-purple-200 transition"
+                      title="Clear previously saved credentials to issue replacement keys"
+                    >
+                      Clear & Replace
+                    </button>
                   </div>
                 )}
 
@@ -1480,6 +1637,144 @@ export default function AdminOrders() {
                 ))}
               </div>
             </section>
+          </div>
+        )}
+      </Modal>
+
+      {/* Printable Invoice Modal */}
+      <Modal
+        open={Boolean(invoiceOrder)}
+        onClose={() => setInvoiceOrder(null)}
+        title={`Invoice: ${invoiceOrder?.orderNumber || ''}`}
+        maxWidth="max-w-3xl"
+      >
+        {invoiceOrder && (
+          <div className="space-y-6 text-xs text-[var(--hexa-text)]">
+            {/* Action Bar */}
+            <div className="flex items-center justify-between pb-4 border-b border-[var(--hexa-border)]">
+              <span className="text-xs text-[var(--hexa-muted)]">
+                Order Placed: {new Date(invoiceOrder.createdAt).toLocaleDateString()}
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="hexa-btn text-xs !bg-sky-600 hover:!bg-sky-500 flex items-center gap-1.5"
+                >
+                  <HugeiconsIcon icon={Invoice01Icon} size={14} /> Print Invoice
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInvoiceOrder(null)}
+                  className="hexa-btn-secondary text-xs"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Content Area */}
+            <div id="printable-invoice" className="p-6 bg-white text-gray-900 rounded-xl space-y-6 shadow-sm border border-gray-200">
+              {/* Header */}
+              <div className="flex justify-between items-start border-b border-gray-200 pb-5">
+                <div>
+                  <h2 className="text-2xl font-black tracking-tight text-gray-900">HEXA SHOP</h2>
+                  <p className="text-xs text-gray-500 font-medium">Digital Gaming & Premium Software Store</p>
+                  <p className="text-xs text-gray-400 mt-1">support@hexashop.com · www.hexashop.com</p>
+                </div>
+                <div className="text-right">
+                  <h3 className="text-lg font-bold text-gray-800">INVOICE</h3>
+                  <p className="font-mono text-xs font-semibold text-purple-600 mt-0.5">#{invoiceOrder.orderNumber}</p>
+                  <p className="text-xs text-gray-500 mt-1">Date: {new Date(invoiceOrder.createdAt).toLocaleDateString()}</p>
+                  <div className="mt-2 inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-emerald-100 text-emerald-800">
+                    Payment: {invoiceOrder.payment?.status || 'unpaid'}
+                  </div>
+                </div>
+              </div>
+
+              {/* Bill To & Payment Info */}
+              <div className="grid grid-cols-2 gap-6 text-xs border-b border-gray-200 pb-5">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Billed To:</p>
+                  <p className="font-bold text-sm text-gray-800 mt-1">{invoiceOrder.customer?.name || 'Customer'}</p>
+                  <p className="text-gray-600">{invoiceOrder.customer?.email}</p>
+                  {invoiceOrder.customer?.phone && <p className="text-gray-600">Phone: {invoiceOrder.customer?.phone}</p>}
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Payment Details:</p>
+                  <p className="font-semibold text-gray-800 mt-1">Method: {invoiceOrder.payment?.methodName || 'Online'}</p>
+                  {invoiceOrder.payment?.transactionId && (
+                    <p className="font-mono text-gray-600">TrxID: {invoiceOrder.payment.transactionId}</p>
+                  )}
+                  {invoiceOrder.payment?.senderNumber && (
+                    <p className="text-gray-600">Sender: {invoiceOrder.payment.senderNumber}</p>
+                  )}
+                  <p className="text-gray-500 mt-1">Fulfillment: <span className="font-semibold capitalize text-gray-700">{invoiceOrder.status}</span></p>
+                </div>
+              </div>
+
+              {/* Items Table */}
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b-2 border-gray-200 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                    <th className="py-2">Item Description</th>
+                    <th className="py-2 text-center">Qty</th>
+                    <th className="py-2 text-right">Price</th>
+                    <th className="py-2 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {(invoiceOrder.items || []).map((item, idx) => (
+                    <tr key={item._id || idx}>
+                      <td className="py-2.5">
+                        <p className="font-bold text-gray-800">{item.productName}</p>
+                        {item.variantName && (
+                          <p className="text-[11px] text-gray-500">{item.variantName}</p>
+                        )}
+                      </td>
+                      <td className="py-2.5 text-center font-medium text-gray-700">{item.quantity}</td>
+                      <td className="py-2.5 text-right font-medium text-gray-700">৳{Number(item.price || 0).toLocaleString()}</td>
+                      <td className="py-2.5 text-right font-bold text-gray-900">৳{Number((item.price || 0) * (item.quantity || 1)).toLocaleString()}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Total Calculation */}
+              <div className="border-t-2 border-gray-200 pt-4 space-y-1.5 text-xs text-right">
+                <div className="flex justify-between text-gray-600">
+                  <span>Subtotal:</span>
+                  <span className="font-medium">৳{Number(invoiceOrder.subtotal || 0).toLocaleString()}</span>
+                </div>
+                {invoiceOrder.coupon?.discount > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span>Coupon ({invoiceOrder.coupon.code}):</span>
+                    <span>-৳{Number(invoiceOrder.coupon.discount).toLocaleString()}</span>
+                  </div>
+                )}
+                {invoiceOrder.promotion?.discount > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span>Promotion Discount:</span>
+                    <span>-৳{Number(invoiceOrder.promotion.discount).toLocaleString()}</span>
+                  </div>
+                )}
+                {invoiceOrder.walletApplied > 0 && (
+                  <div className="flex justify-between text-emerald-600">
+                    <span>Wallet Credit Applied:</span>
+                    <span>-৳{Number(invoiceOrder.walletApplied).toLocaleString()}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-base font-black text-gray-900 border-t border-gray-200 pt-2">
+                  <span>Grand Total:</span>
+                  <span className="text-purple-700">৳{Number(invoiceOrder.total || 0).toLocaleString()}</span>
+                </div>
+              </div>
+
+              {/* Footer Note */}
+              <div className="border-t border-gray-200 pt-4 text-center text-[11px] text-gray-400">
+                <p>Thank you for purchasing with Hexa Shop! All digital licenses & account credentials can be reviewed in your customer portal.</p>
+              </div>
+            </div>
           </div>
         )}
       </Modal>

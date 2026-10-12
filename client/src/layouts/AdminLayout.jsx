@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { NavLink, Outlet, Link, useNavigate } from 'react-router-dom'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
+  Calendar01Icon,
   ChartBarLineIcon,
   Clock01Icon,
   Coins01Icon,
@@ -36,6 +37,7 @@ const items = [
   ['Categories', '/admin/categories', Layers01Icon],
   ['Inventory', '/admin/inventory', Store01Icon],
   ['Orders', '/admin/orders', Invoice01Icon],
+  ['Subscriptions', '/admin/subscriptions', Calendar01Icon],
   ['Wallet', '/admin/wallet', Coins01Icon],
   ['Payment Methods', '/admin/payment-methods', CreditCardIcon],
   ['Banners', '/admin/banners', Image01Icon],
@@ -141,7 +143,14 @@ export default function AdminLayout() {
               {/* Profile Avatar */}
               <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-400 font-extrabold text-sm overflow-hidden">
                 {user?.avatar?.url ? (
-                  <img src={user.avatar.url} alt={user.name} className="h-full w-full object-cover" />
+                  <img
+                    src={user.avatar.url}
+                    alt={user.name}
+                    className="h-full w-full object-cover"
+                    crossOrigin="anonymous"
+                    referrerPolicy="no-referrer"
+                    loading="lazy"
+                  />
                 ) : (
                   <span>{user?.name ? user.name.charAt(0).toUpperCase() : 'A'}</span>
                 )}

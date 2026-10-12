@@ -40,6 +40,7 @@ const variantSchema = new mongoose.Schema({
   platform: { type: String, trim: true, default: '' },
   regularPrice: { type: Number, required: true, min: 0 },
   salePrice: { type: Number, min: 0, default: 0 },
+  purchasePrice: { type: Number, min: 0, default: 0 },
   costPrice: { type: Number, min: 0, default: 0 },
   stock: { type: Number, min: 0, default: 0 },
   unlimitedStock: { type: Boolean, default: false },
@@ -86,6 +87,8 @@ const productSchema = new mongoose.Schema({
   subcategory: { type: String, default: '', trim: true },
   regularPrice: { type: Number, min: 0, default: 0 },
   salePrice: { type: Number, min: 0, default: 0 },
+  purchasePrice: { type: Number, min: 0, default: 0 },
+  costPrice: { type: Number, min: 0, default: 0 },
   currency: { type: String, default: 'BDT', uppercase: true },
   stock: { type: Number, min: 0, default: 0 },
   allowUnlimitedStock: { type: Boolean, default: false },
@@ -153,6 +156,23 @@ productSchema.virtual('stockStatus').get(function stockStatus() {
   if (this.stock <= 0) return 'out_of_stock';
   if (this.stock <= this.lowStockThreshold) return 'low_stock';
   return 'in_stock';
+});
+
+productSchema.pre('validate', function syncPrices() {
+  if (this.purchasePrice && !this.costPrice) {
+    this.costPrice = this.purchasePrice;
+  } else if (this.costPrice && !this.purchasePrice) {
+    this.purchasePrice = this.costPrice;
+  }
+  if (this.variants?.length) {
+    for (const v of this.variants) {
+      if (v.purchasePrice && !v.costPrice) {
+        v.costPrice = v.purchasePrice;
+      } else if (v.costPrice && !v.purchasePrice) {
+        v.purchasePrice = v.costPrice;
+      }
+    }
+  }
 });
 
 productSchema.set('toJSON', { virtuals: true });

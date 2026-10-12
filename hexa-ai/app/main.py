@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import Settings, get_settings
 from app.middleware.rate_limit import InMemoryRateLimiter
 from app.routes.chat import router as chat_router
+from app.routes.support import router as support_router
 from app.services.gemini_service import GeminiService
 from app.services.hexa_api_service import HexaApiService
 
@@ -55,6 +56,7 @@ def create_app(
         }
 
     app.include_router(chat_router)
+    app.include_router(support_router)
     return app
 
 

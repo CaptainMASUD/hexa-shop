@@ -32,5 +32,7 @@ const schema = new mongoose.Schema({
   },
   faq: [{ question: { type: String, required: true }, answer: { type: String, required: true } }],
   webhooks: [{ name: String, url: String, events: [String], active: { type: Boolean, default: false }, secret: { type: String, select: false } }],
+  maintenanceMode: { type: Boolean, default: false },
+  maintenanceMessage: { type: String, default: 'We are currently performing scheduled maintenance. Please check back shortly.' },
 }, { timestamps: true });
 export default mongoose.model('SiteSettings', schema);

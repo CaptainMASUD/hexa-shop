@@ -205,10 +205,6 @@ export default function HexaAssistant() {
             <div className="flex items-center gap-2.5">
               <div className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-purple-500/30 bg-purple-500/15 text-purple-600 dark:text-purple-400 shadow-sm">
                 <HugeiconsIcon icon={AiChat02Icon} size={20} />
-                <span className="absolute -bottom-0.5 -right-0.5 flex h-2.5 w-2.5">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-emerald-500" />
-                </span>
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
@@ -480,18 +476,38 @@ export default function HexaAssistant() {
       {/* Floating Trigger Button & Tooltip */}
       <div className="flex items-center gap-2.5">
         {!isOpen && showTooltip && (
-          <div className="hidden sm:flex items-center gap-2 rounded-xl border border-purple-200 dark:border-purple-500/30 bg-white dark:bg-[#0d0d12] text-gray-900 dark:text-white px-3.5 py-2 text-xs font-medium shadow-xl shadow-purple-950/20 dark:shadow-purple-950/40 animate-bounce">
-            <HugeiconsIcon icon={SparklesIcon} size={14} className="text-purple-600 dark:text-purple-400 shrink-0" />
-            <span>Looking for a subscription? Chat with <strong>HEXA AI</strong></span>
+          <div
+            onClick={() => {
+              setIsOpen(true)
+              setShowTooltip(false)
+            }}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                setIsOpen(true)
+                setShowTooltip(false)
+              }
+            }}
+            className="group/tooltip hidden sm:flex items-center gap-2.5 rounded-2xl border border-purple-200/80 dark:border-purple-500/25 bg-white/95 dark:bg-[#0d0c15]/95 backdrop-blur-xl text-gray-800 dark:text-gray-100 pl-3 pr-2 py-2 text-xs font-medium shadow-[0_8px_24px_rgba(0,0,0,0.12)] dark:shadow-[0_8px_28px_rgba(0,0,0,0.45)] hover:border-purple-500/40 hover:scale-[1.015] active:scale-[0.99] transition-all duration-200 cursor-pointer select-none"
+          >
+            <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+              <HugeiconsIcon icon={SparklesIcon} size={13} />
+            </span>
+            <span className="text-[12px] font-normal leading-tight text-gray-600 dark:text-gray-300">
+              Looking for a subscription? Chat with{' '}
+              <strong className="font-semibold text-purple-600 dark:text-purple-400">HEXA AI</strong>
+            </span>
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
                 setShowTooltip(false)
               }}
-              className="text-gray-400 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white ml-1 font-bold cursor-pointer"
+              aria-label="Close tooltip"
+              className="flex h-5 w-5 items-center justify-center rounded-full text-gray-400 hover:bg-gray-200/60 hover:text-gray-700 dark:text-gray-500 dark:hover:bg-white/10 dark:hover:text-gray-200 transition-colors cursor-pointer ml-0.5"
             >
-              ×
+              <HugeiconsIcon icon={Cancel01Icon} size={12} />
             </button>
           </div>
         )}
@@ -512,13 +528,7 @@ export default function HexaAssistant() {
             {isOpen ? (
               <HugeiconsIcon icon={Cancel01Icon} size={22} className="transition-transform duration-200 rotate-90 group-hover:rotate-180" />
             ) : (
-              <>
-                <HugeiconsIcon icon={AiChat02Icon} size={24} className="transition-transform group-hover:scale-110" />
-                <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex h-3 w-3 rounded-full bg-emerald-400 border-2 border-purple-900" />
-                </span>
-              </>
+              <HugeiconsIcon icon={AiChat02Icon} size={24} className="transition-transform group-hover:scale-110" />
             )}
           </div>
         </button>

@@ -13,6 +13,9 @@ class FakeContextService:
     async def fetch_account_context(self, authorization):
         return None
 
+    async def fetch_recommendations(self, **kwargs):
+        return []
+
 
 def test_chat_rate_limit_returns_429_after_limit():
     settings = Settings(

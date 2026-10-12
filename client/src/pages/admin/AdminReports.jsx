@@ -4,6 +4,7 @@ import {
   Calendar01Icon,
   ChartBarLineIcon,
   Coins01Icon,
+  Copy01Icon,
   Invoice01Icon,
   Layers01Icon,
   ShoppingBag01Icon,
@@ -41,11 +42,54 @@ export default function AdminReports() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const exportReportCsv = () => {
+    if (!products.length && !categories.length) return
+
+    const headers = ['Type', 'Item Name', 'Units Sold', 'Revenue (BDT)', 'Cost (BDT)', 'Gross Profit (BDT)', 'Margin %']
+    const rows = [
+      ...products.map((p) => [
+        'Product',
+        p.name || '',
+        p.unitsSold || 0,
+        p.revenue || 0,
+        p.totalCost || 0,
+        p.grossProfit || 0,
+        `${p.profitMargin || 0}%`,
+      ]),
+      ...categories.map((c) => [
+        'Category',
+        c.name || '',
+        c.unitsSold || 0,
+        c.revenue || 0,
+        0,
+        0,
+        'N/A',
+      ]),
+    ]
+
+    const csvContent = [
+      headers.map((h) => `"${h.replace(/"/g, '""')}"`).join(','),
+      ...rows.map((row) =>
+        row.map((val) => `"${String(val ?? '').replace(/"/g, '""')}"`).join(',')
+      ),
+    ].join('\r\n')
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.setAttribute('download', `hexa_report_${from || 'start'}_to_${to || 'now'}.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <>
       <AdminPageHeader
         title="Reports & Analytics"
-        description="Date-filtered sales, product and category performance powered by high-efficiency MongoDB aggregations."
+        description="Date-filtered sales, COGS, gross profits, and category performance powered by high-efficiency MongoDB aggregations."
       />
 
       {/* Filter Panel */}
@@ -81,43 +125,76 @@ export default function AdminReports() {
         >
           {loading ? 'Calculating...' : 'Apply Range'}
         </button>
+        <button
+          type="button"
+          onClick={exportReportCsv}
+          disabled={!products.length}
+          className="hexa-btn-secondary text-xs !py-2.5 !px-4 flex items-center gap-1.5 disabled:opacity-50"
+          title="Export report data to CSV"
+        >
+          <HugeiconsIcon icon={Copy01Icon} size={14} /> Export CSV
+        </button>
       </div>
 
-      {/* KPI Stats */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      {/* KPI Stats Grid */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <Stat
-          label="Total Verified Revenue"
+          label="Total Revenue"
           value={`৳${(sales?.summary?.totalSales || 0).toLocaleString()}`}
           icon={Coins01Icon}
           color="text-emerald-400"
           bgColor="bg-emerald-500/10"
         />
         <Stat
-          label="Total Completed Orders"
-          value={sales?.summary?.orders || 0}
-          icon={Invoice01Icon}
+          label="Cost of Goods (COGS)"
+          value={`৳${(sales?.summary?.totalCost || 0).toLocaleString()}`}
+          icon={Layers01Icon}
+          color="text-amber-400"
+          bgColor="bg-amber-500/10"
+        />
+        <Stat
+          label="Gross Profit"
+          value={`৳${(sales?.summary?.grossProfit || 0).toLocaleString()}`}
+          icon={Coins01Icon}
+          color="text-teal-400"
+          bgColor="bg-teal-500/10"
+        />
+        <Stat
+          label="Profit Margin"
+          value={`${sales?.summary?.profitMargin || 0}%`}
+          icon={ChartBarLineIcon}
           color="text-purple-400"
           bgColor="bg-purple-500/10"
         />
         <Stat
+          label="Completed Orders"
+          value={sales?.summary?.orders || 0}
+          icon={Invoice01Icon}
+          color="text-sky-400"
+          bgColor="bg-sky-500/10"
+        />
+        <Stat
           label="Average Order Value"
           value={`৳${Math.round(sales?.summary?.averageOrderValue || 0).toLocaleString()}`}
-          icon={ChartBarLineIcon}
-          color="text-amber-400"
-          bgColor="bg-amber-500/10"
+          icon={ShoppingBag01Icon}
+          color="text-indigo-400"
+          bgColor="bg-indigo-500/10"
         />
       </div>
 
       {/* Tables Grid */}
       <div className="mt-6 grid gap-6 xl:grid-cols-2">
         <Table
-          title="Top Performing Products"
+          title="Top Performing Products & Profit Margins"
           icon={ShoppingBag01Icon}
           rows={products}
           columns={[
             ['name', 'Product'],
             ['unitsSold', 'Units Sold'],
-            ['revenue', 'Gross Revenue'],
+            ['revenue', 'Revenue'],
+            ['totalCost', 'Cost'],
+            ['grossProfit', 'Gross Profit'],
+            ['profitMargin', 'Margin %'],
           ]}
         />
         <Table
@@ -213,13 +290,34 @@ function Table({ title, icon, rows, columns }) {
             ) : (
               rows.map((row, i) => (
                 <tr key={row._id || i} className="hover:bg-white/[0.02] transition">
-                  {columns.map(([key]) => (
-                    <td key={key} className="px-5 py-3">
-                      {key === 'revenue'
-                        ? `৳${Number(row[key] || 0).toLocaleString()}`
-                        : row[key]}
-                    </td>
-                  ))}
+                  {columns.map(([key]) => {
+                    const val = row[key]
+                    let rendered = val
+
+                    if (key === 'revenue' || key === 'totalCost') {
+                      rendered = `৳${Number(val || 0).toLocaleString()}`
+                    } else if (key === 'grossProfit') {
+                      const num = Number(val || 0)
+                      rendered = (
+                        <span className={num >= 0 ? 'text-emerald-400 font-bold' : 'text-rose-400 font-bold'}>
+                          {num >= 0 ? `+৳${num.toLocaleString()}` : `-৳${Math.abs(num).toLocaleString()}`}
+                        </span>
+                      )
+                    } else if (key === 'profitMargin') {
+                      const num = Number(val || 0)
+                      rendered = (
+                        <span className="font-bold text-purple-400">
+                          {num}%
+                        </span>
+                      )
+                    }
+
+                    return (
+                      <td key={key} className="px-5 py-3">
+                        {rendered}
+                      </td>
+                    )
+                  })}
                 </tr>
               ))
             )}
@@ -229,3 +327,4 @@ function Table({ title, icon, rows, columns }) {
     </section>
   )
 }
+

@@ -480,8 +480,8 @@ export default function CheckoutPage() {
           {isManual && (
             <Section number="5" title="Transaction details">
               {isFullyPaid ? (
-                <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/[0.08] p-4 text-sm text-emerald-300 flex items-center gap-2.5">
-                  <FaCheckCircle className="text-base shrink-0" />
+                <div className="rounded-xl border border-emerald-200 dark:border-emerald-500/20 bg-emerald-50 dark:bg-emerald-500/[0.08] p-4 text-sm text-emerald-800 dark:text-emerald-300 flex items-center gap-2.5 font-medium">
+                  <FaCheckCircle className="text-base shrink-0 text-emerald-600 dark:text-emerald-400" />
                   <span>
                     Your order total is ৳0 (100% covered by wallet or loyalty rewards). No sender number or transaction ID is required.
                   </span>

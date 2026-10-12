@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { HugeiconsIcon } from '@hugeicons/react'
 import {
+  Coins01Icon,
   Key01Icon,
   PackageIcon,
   PlusSignIcon,
@@ -15,6 +16,7 @@ import AdminPageHeader from '../../components/AdminPageHeader'
 import Modal from '../../components/Modal'
 import StatusBadge from '../../components/StatusBadge'
 import AdminCursorPagination from '../../components/AdminCursorPagination'
+import StockEntryModal from '../../components/StockEntryModal'
 
 const initialStockForm = {
   productId: '',
@@ -58,6 +60,11 @@ export default function AdminInventory() {
   const [stockOpen, setStockOpen] = useState(false)
   const [credOpen, setCredOpen] = useState(false)
   const [bulkOpen, setBulkOpen] = useState(false)
+  const [stockEntryModal, setStockEntryModal] = useState({
+    open: false,
+    product: null,
+    variantId: null,
+  })
   const [stockForm, setStockForm] = useState(initialStockForm)
   const [cred, setCred] = useState(initialCredentialForm)
   const [bulkForm, setBulkForm] = useState(initialBulkForm)
@@ -261,6 +268,12 @@ export default function AdminInventory() {
         description="Manage stock and protected credentials at product or variant level. Bundles do not carry separate stock; bundle orders reserve and consume their component products automatically."
         action={(
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setStockEntryModal({ open: true, product: null, variantId: null })}
+              className="flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-2.5 text-xs font-bold text-emerald-400 hover:bg-emerald-500/20 transition cursor-pointer"
+            >
+              <HugeiconsIcon icon={Coins01Icon} size={15} /> Stock Entry & Cost
+            </button>
             <button onClick={() => setStockOpen(true)} className="hexa-btn-secondary">
               <HugeiconsIcon icon={Store01Icon} size={15} /> Adjust stock
             </button>
@@ -351,20 +364,23 @@ export default function AdminInventory() {
             <table className="w-full min-w-[720px] text-sm">
               <thead className="sticky top-0 z-10 bg-[var(--hexa-card)] text-xs text-[var(--hexa-muted)]">
                 <tr className="border-b border-[var(--hexa-border)]">
-                  {['Product', 'Change', 'Previous', 'New', 'Reason', 'Date'].map((heading) => (
+                  {['Product', 'Change', 'Buy Cost', 'Previous', 'New', 'Reason', 'Date'].map((heading) => (
                     <th key={heading} className="px-4 py-3 text-left font-semibold">{heading}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {!loading && history.length === 0 && (
-                  <tr><td colSpan="6" className="px-4 py-10 text-center text-[var(--hexa-muted)]">No stock movements yet.</td></tr>
+                  <tr><td colSpan="7" className="px-4 py-10 text-center text-[var(--hexa-muted)]">No stock movements yet.</td></tr>
                 )}
                 {history.map((row) => (
                   <tr key={row._id} className="border-b border-[var(--hexa-border)] last:border-b-0">
                     <td className="px-4 py-3 font-medium">{row.product?.name || 'Unknown product'}</td>
                     <td className={`px-4 py-3 font-semibold ${row.quantityChanged > 0 ? 'text-emerald-500' : 'text-rose-500'}`}>
                       {row.quantityChanged > 0 ? '+' : ''}{row.quantityChanged}
+                    </td>
+                    <td className="px-4 py-3 text-xs font-semibold text-emerald-400">
+                      {row.purchasePrice > 0 ? `৳${row.purchasePrice.toLocaleString()}` : '—'}
                     </td>
                     <td className="px-4 py-3 text-[var(--hexa-muted)]">{row.previousStock}</td>
                     <td className="px-4 py-3">{row.newStock}</td>
@@ -680,6 +696,18 @@ export default function AdminInventory() {
           </button>
         </form>
       </Modal>
+
+      {/* Modern Stock Entry & Profit Adjustment Modal */}
+      <StockEntryModal
+        open={stockEntryModal.open}
+        onClose={() => setStockEntryModal({ open: false, product: null, variantId: null })}
+        initialProduct={stockEntryModal.product}
+        initialVariantId={stockEntryModal.variantId}
+        products={products}
+        onSuccess={() => {
+          load()
+        }}
+      />
     </>
   )
 }

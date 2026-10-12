@@ -7,6 +7,7 @@ const stockMovementSchema = new mongoose.Schema({
   quantityChanged: { type: Number, required: true },
   newStock: { type: Number, required: true },
   reason: { type: String, required: true, trim: true },
+  purchasePrice: { type: Number, min: 0, default: 0 },
   order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', default: null, index: true },
   changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
 }, { timestamps: true });

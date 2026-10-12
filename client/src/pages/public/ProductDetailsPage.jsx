@@ -24,7 +24,7 @@ import {
   HexagonIcon,
   LockPasswordIcon,
   MinusSignIcon,
-  Notification01Icon,
+  BellIcon,
   PackageIcon,
   PlusSignIcon,
   Shield01Icon,
@@ -192,33 +192,23 @@ export default function ProductDetailsPage() {
           setCustomerInputs({})
         }
 
-        return getProducts({
-          category:
-            item.category
-              ?.slug,
-          limit: 4,
-        })
-      })
-      .then((response) => {
-        if (
-          !active ||
-          !response
-        ) {
-          return
-        }
+        setLoading(false)
 
-        setRelated(
-          (
-            response.data ||
-            []
-          )
-            .filter(
-              (item) =>
-                item.slug !==
-                slug
-            )
-            .slice(0, 3)
-        )
+        if (item.category?.slug) {
+          getProducts({
+            category: item.category.slug,
+            limit: 4,
+          })
+            .then((response) => {
+              if (!active || !response) return
+              setRelated(
+                (response.data || [])
+                  .filter((p) => p.slug !== slug)
+                  .slice(0, 3)
+              )
+            })
+            .catch(() => {})
+        }
       })
       .catch(() => {
         if (!active) {
@@ -227,11 +217,7 @@ export default function ProductDetailsPage() {
 
         setProduct(null)
         setRelated([])
-      })
-      .finally(() => {
-        if (active) {
-          setLoading(false)
-        }
+        setLoading(false)
       })
 
     return () => {
@@ -1783,7 +1769,7 @@ export default function ProductDetailsPage() {
                   }}
                   className="col-span-2 flex h-11 w-full items-center justify-center gap-2 rounded-xl bg-amber-500/10 border border-amber-500/30 text-sm font-bold text-amber-400 transition hover:bg-amber-500/20 active:scale-[0.99]"
                 >
-                  <HugeiconsIcon icon={Notification01Icon} size={18} />
+                  <HugeiconsIcon icon={BellIcon} size={18} />
                   Notify Me When Available
                 </button>
               ) : (
@@ -2247,7 +2233,7 @@ export default function ProductDetailsPage() {
                   <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
                 ) : (
                   <>
-                    <HugeiconsIcon icon={Notification01Icon} size={16} />
+                    <HugeiconsIcon icon={BellIcon} size={16} />
                     Subscribe to Restock Alert
                   </>
                 )}

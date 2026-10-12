@@ -19,10 +19,10 @@ export default function BotShield({ onVerified, className = '' }) {
 
   return (
     <div
-      className={`flex items-center justify-between gap-3 rounded-xl border border-emerald-500/20 bg-emerald-500/[0.04] p-3 text-xs text-[var(--hexa-muted)] ${className}`}
+      className={`flex items-center justify-between gap-3 rounded-xl border border-emerald-500/25 bg-emerald-500/[0.05] p-3 text-xs text-[var(--hexa-muted)] dark:border-emerald-500/20 dark:bg-emerald-500/[0.04] ${className}`}
     >
       <div className="flex items-center gap-2">
-        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+        <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
           <HugeiconsIcon icon={Shield01Icon} size={16} />
         </div>
         <div>
@@ -31,7 +31,7 @@ export default function BotShield({ onVerified, className = '' }) {
         </div>
       </div>
 
-      <div className="flex items-center gap-1.5 font-semibold text-emerald-400 text-xs">
+      <div className="flex items-center gap-1.5 font-semibold text-emerald-600 dark:text-emerald-400 text-xs">
         <HugeiconsIcon icon={CheckmarkCircle01Icon} size={15} />
         <span>Verified</span>
       </div>

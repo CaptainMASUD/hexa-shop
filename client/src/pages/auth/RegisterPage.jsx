@@ -246,8 +246,8 @@ export default function RegisterPage() {
             </p>
 
             {resendSuccess ? (
-              <div className="mt-2 p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-300 flex items-center gap-1.5">
-                <HugeiconsIcon icon={Tick02Icon} size={14} className="shrink-0" />
+              <div className="mt-2 p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-[11px] text-emerald-800 dark:bg-emerald-500/10 dark:border-emerald-500/20 dark:text-emerald-300 flex items-center gap-1.5 font-medium">
+                <HugeiconsIcon icon={Tick02Icon} size={14} className="shrink-0 text-emerald-600 dark:text-emerald-400" />
                 <span>{resendSuccess}</span>
               </div>
             ) : (

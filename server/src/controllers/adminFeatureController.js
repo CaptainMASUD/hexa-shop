@@ -19,12 +19,16 @@ import Subscription from '../models/Subscription.js';
 import Banner from '../models/Banner.js';
 import AffiliatePayout from '../models/AffiliatePayout.js';
 import FraudBlock from '../models/FraudBlock.js';
+import RestockAlert from '../models/RestockAlert.js';
+import { checkAndTriggerRestockAlerts } from '../services/restockService.js';
+import { analyzeTicketForAdmin } from '../services/aiSupportService.js';
 import ApiError from '../utils/ApiError.js';
 import asyncHandler from '../utils/asyncHandler.js';
 import { success } from '../utils/response.js';
 import { toSlug } from '../utils/slug.js';
 import { writeAudit } from '../services/auditService.js';
-import { getSettings } from '../services/settingsService.js';
+import { getSettings, invalidateSettingsCache } from '../services/settingsService.js';
+import serverCache from '../utils/cache.js';
 import { creditWallet } from '../services/rewardService.js';
 import { notifyUser } from '../services/notificationService.js';
 import { ensureAdminOperationalAlerts } from '../services/operationalAlertService.js';
@@ -103,6 +107,7 @@ export const bundleCrud = {
     const payload = normalizeBundlePayload(req.body);
     await ensureBundleReferences(payload);
     const doc = await Bundle.create(payload);
+    serverCache.invalidateTags(['bundles', 'home']);
     await writeAudit(req, 'Bundle_created', 'Bundle', doc._id);
     return success(res, { status: 201, message: 'Bundle created', data: doc });
   }),
@@ -113,6 +118,7 @@ export const bundleCrud = {
     await ensureBundleReferences(payload);
     Object.assign(doc, payload);
     await doc.save();
+    serverCache.invalidateTags(['bundles', 'home']);
     await writeAudit(req, 'Bundle_updated', 'Bundle', doc._id);
     return success(res, { message: 'Bundle updated', data: doc });
   }),
@@ -127,6 +133,7 @@ export const bundleCrud = {
       Coupon.updateMany({}, { $pull: { allowedBundles: doc._id } }),
       Banner.updateMany({ targetType: 'bundle', targetId: doc._id }, { $set: { active: false, targetType: 'none', targetId: null } }),
     ]);
+    serverCache.invalidateTags(['bundles', 'home']);
     await writeAudit(req, 'Bundle_deleted', 'Bundle', doc._id);
     return success(res, { message: 'Bundle deleted' });
   }),
@@ -185,6 +192,7 @@ export const promotionCrud = {
   create: asyncHandler(async (req, res) => {
     const payload = await ensurePromotionReferences(req.body);
     const doc = await Promotion.create(payload);
+    serverCache.invalidateTags(['promotions', 'home']);
     await writeAudit(req, 'Promotion_created', 'Promotion', doc._id);
     return success(res, { status: 201, message: 'Promotion created', data: doc });
   }),
@@ -194,6 +202,7 @@ export const promotionCrud = {
     const payload = await ensurePromotionReferences(req.body);
     Object.assign(doc, payload);
     await doc.save();
+    serverCache.invalidateTags(['promotions', 'home']);
     await writeAudit(req, 'Promotion_updated', 'Promotion', doc._id);
     return success(res, { message: 'Promotion updated', data: doc });
   }),
@@ -201,6 +210,7 @@ export const promotionCrud = {
     const doc = await Promotion.findOne({ _id: req.params.id, deletedAt: null });
     if (!doc) throw new ApiError(404, 'Promotion not found');
     doc.active = false; doc.deletedAt = new Date(); await doc.save();
+    serverCache.invalidateTags(['promotions', 'home']);
     await writeAudit(req, 'Promotion_deleted', 'Promotion', doc._id);
     return success(res, { message: 'Promotion deleted' });
   }),
@@ -218,10 +228,66 @@ export const roleCrud=crud(Role,'Role',(b)=>({ ...b, ...((b.slug !== undefined |
 export const adminReviews=asyncHandler(async(req,res)=>{ const q={}; if(req.query.status) q.status=req.query.status; const data=await Review.find(q).populate('user','name email').populate('product','name slug').sort({createdAt:-1}).limit(200).lean(); return success(res,{data}); });
 export const moderateReview=asyncHandler(async(req,res)=>{ const r=await Review.findByIdAndUpdate(req.params.id,{$set:{status:req.body.status}},{new:true}); if(!r) throw new ApiError(404,'Review not found'); return success(res,{message:'Review status updated',data:r}); });
 
-export const adminTickets=asyncHandler(async(req,res)=>{ const q={}; if(req.query.status) q.status=req.query.status; const data=await SupportTicket.find(q).populate('user','name email').sort({lastReplyAt:-1}).limit(200).lean(); return success(res,{data}); });
-export const adminTicket=asyncHandler(async(req,res)=>{ const t=await SupportTicket.findById(req.params.id).populate('user','name email phone').populate('messages.sender','name role').lean(); if(!t) throw new ApiError(404,'Ticket not found'); return success(res,{data:t}); });
-export const adminReplyTicket=asyncHandler(async(req,res)=>{ const t=await SupportTicket.findById(req.params.id); if(!t) throw new ApiError(404,'Ticket not found'); t.messages.push({sender:req.user._id,message:req.body.message,isAdmin:true}); t.lastReplyAt=new Date(); t.status=req.body.status||'waiting_customer'; await t.save(); await notifyUser(t.user,'support','Support replied to your ticket',`There is a new reply on ${t.ticketNumber}.`,`/account/support`); return success(res,{message:'Reply sent',data:t}); });
-export const adminTicketStatus=asyncHandler(async(req,res)=>{ const t=await SupportTicket.findByIdAndUpdate(req.params.id,{$set:{status:req.body.status,priority:req.body.priority||undefined}},{new:true}); if(!t) throw new ApiError(404,'Ticket not found'); return success(res,{message:'Ticket updated',data:t}); });
+export const adminTickets = asyncHandler(async (req, res) => {
+  const q = {};
+  if (req.query.status && req.query.status !== 'all') q.status = req.query.status;
+  if (req.query.needsAdmin === 'true') {
+    q['aiReport.needsAdminAction'] = true;
+  }
+  const data = await SupportTicket.find(q)
+    .populate('user', 'name email')
+    .sort({ lastReplyAt: -1 })
+    .limit(200)
+    .lean();
+  return success(res, { data });
+});
+export const adminTicket = asyncHandler(async (req, res) => {
+  const t = await SupportTicket.findById(req.params.id)
+    .populate('user', 'name email phone')
+    .populate('messages.sender', 'name role')
+    .lean();
+  if (!t) throw new ApiError(404, 'Ticket not found');
+  return success(res, { data: t });
+});
+export const adminReplyTicket = asyncHandler(async (req, res) => {
+  const t = await SupportTicket.findById(req.params.id);
+  if (!t) throw new ApiError(404, 'Ticket not found');
+  t.messages.push({ sender: req.user._id, message: req.body.message, isAdmin: true, isAi: false });
+  t.lastReplyAt = new Date();
+  t.status = req.body.status || 'waiting_customer';
+  // If admin responds, they've resolved the urgent escalation need
+  if (t.aiReport?.needsAdminAction && req.body.status !== 'open') {
+    t.aiReport.needsAdminAction = false;
+  }
+  await t.save();
+  await notifyUser(t.user, 'support', 'Support replied to your ticket', `There is a new reply on ${t.ticketNumber}.`, `/account/support`);
+  return success(res, { message: 'Reply sent', data: t });
+});
+export const adminTicketStatus = asyncHandler(async (req, res) => {
+  const updateData = { status: req.body.status };
+  if (req.body.priority) updateData.priority = req.body.priority;
+  if (req.body.status === 'resolved' || req.body.status === 'closed') {
+    updateData['aiReport.needsAdminAction'] = false;
+  }
+  const t = await SupportTicket.findByIdAndUpdate(
+    req.params.id,
+    { $set: updateData },
+    { new: true }
+  );
+  if (!t) throw new ApiError(404, 'Ticket not found');
+  return success(res, { message: 'Ticket updated', data: t });
+});
+export const adminAiAnalyzeTicket = asyncHandler(async (req, res) => {
+  const result = await analyzeTicketForAdmin(req.params.id);
+  await writeAudit(req, 'ticket_ai_analyzed', 'SupportTicket', req.params.id, {
+    needsAdminAction: result.adminReport?.needsAdminAction,
+    sentiment: result.adminReport?.sentiment,
+  }).catch(() => {});
+  return success(res, {
+    message: 'AI analysis and draft generated successfully',
+    data: result,
+  });
+});
 
 export const adminRefunds=asyncHandler(async(req,res)=>success(res,{data:await RefundRequest.find().populate('user','name email').populate('order','orderNumber total status payment').sort({createdAt:-1}).lean()}));
 export const resolveRefund=asyncHandler(async(req,res)=>{ const r=await RefundRequest.findById(req.params.id); if(!r) throw new ApiError(404,'Refund request not found'); r.status=req.body.status; r.adminNote=req.body.adminNote||''; if(['approved','rejected','completed'].includes(r.status)){r.resolvedBy=req.user._id;r.resolvedAt=new Date();} await r.save(); if(req.body.creditWallet && r.status==='completed') await creditWallet(r.user,r.requestedAmount,'refund',r.order,`Refund for order ${r.order}`); await notifyUser(r.user,'refund',`Refund ${r.status}`,`Your refund request is now ${r.status}.`,'/account/refunds'); return success(res,{message:'Refund updated',data:r}); });
@@ -242,6 +308,7 @@ export const updateSiteSettings=asyncHandler(async(req,res)=>{
     {$set:safe},
     {upsert:true,new:true,runValidators:true,setDefaultsOnInsert:true}
   );
+  invalidateSettingsCache();
   await writeAudit(req,'site_settings_updated','SiteSettings',doc._id);
   return success(res,{message:'Site settings updated',data:doc});
 });
@@ -262,6 +329,7 @@ export const backupRestore=asyncHandler(async(req,res)=>{
   await upsertMany(Banner,data.banners||[]);
   await upsertMany(Role,data.roles||[],'slug');
   if(data.settings){const settings=data.settings.toObject?data.settings.toObject():data.settings;delete settings._id;delete settings.__v;delete settings.webhooks;await SiteSettings.findOneAndUpdate({key:'global'},{$set:settings},{upsert:true,new:true,runValidators:false});}
+  serverCache.clear();
   await writeAudit(req,'backup_restored','System',null,{version:backup.version,scope:backup.scope||'legacy'});
   return success(res,{message:'Catalog and configuration backup restored'});
 });
@@ -395,4 +463,174 @@ export const toggleFraudBlock = asyncHandler(async (req, res) => {
   block.isActive = !block.isActive;
   await block.save();
   return success(res, { message: `Fraud block ${block.isActive ? 'activated' : 'deactivated'}`, data: block });
+});
+
+export const adminSubscriptions = asyncHandler(async (req, res) => {
+  const query = {};
+  if (req.query.status && req.query.status.trim()) {
+    query.status = req.query.status.trim();
+  }
+  if (req.query.expiringSoon === 'true') {
+    const soon = new Date(Date.now() + 7 * 86400000);
+    query.status = 'active';
+    query.expiresAt = { $ne: null, $lte: soon, $gte: new Date() };
+  }
+  if (req.query.q && req.query.q.trim()) {
+    const regex = new RegExp(req.query.q.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+    const matchingUsers = await User.find({ $or: [{ name: regex }, { email: regex }, { phone: regex }] }).select('_id');
+    const userIds = matchingUsers.map((u) => u._id);
+    query.$or = [
+      { productName: regex },
+      { planName: regex },
+      { user: { $in: userIds } },
+    ];
+  }
+  const limit = Math.min(100, Math.max(1, Number(req.query.limit || 50)));
+  const result = await paginateWithCursor(Subscription, query, {
+    limit,
+    cursor: req.query.cursor,
+    direction: req.query.direction,
+    populate: [
+      { path: 'user', select: 'name email phone avatar' },
+      { path: 'product', select: 'name slug thumbnail variants' },
+      { path: 'order', select: 'orderNumber total payment status' },
+    ],
+    includeTotal: true,
+  });
+  return success(res, result);
+});
+
+export const adminExtendSubscription = asyncHandler(async (req, res) => {
+  const { days, newExpiryDate, note = '' } = req.body;
+  const sub = await Subscription.findById(req.params.id);
+  if (!sub) throw new ApiError(404, 'Subscription not found');
+
+  let targetDate;
+  if (newExpiryDate) {
+    targetDate = new Date(newExpiryDate);
+  } else if (days) {
+    const base = sub.expiresAt && new Date(sub.expiresAt) > new Date() ? new Date(sub.expiresAt) : new Date();
+    targetDate = new Date(base.getTime() + Number(days) * 86400000);
+  } else {
+    throw new ApiError(400, 'Either days or newExpiryDate must be provided');
+  }
+
+  const previousExpiry = sub.expiresAt;
+  sub.expiresAt = targetDate;
+  sub.status = 'active';
+  await sub.save();
+
+  await writeAudit(req, 'subscription_extended', 'Subscription', sub._id, {
+    previousExpiry,
+    newExpiry: targetDate,
+    daysAdded: days,
+    note,
+  });
+
+  await notifyUser(
+    sub.user,
+    'subscription_extended',
+    `🎉 Subscription Extended: ${sub.productName}`,
+    `Your ${sub.planName || 'subscription'} has been extended to ${targetDate.toLocaleDateString()}.${note ? ` Note: ${note}` : ''}`,
+    '/account/subscriptions',
+    { subscriptionId: sub._id }
+  ).catch(() => {});
+
+  return success(res, { message: 'Subscription extended successfully', data: sub });
+});
+
+export const adminUpdateSubscriptionStatus = asyncHandler(async (req, res) => {
+  const { status, note = '' } = req.body;
+  if (!['active', 'expired', 'cancelled'].includes(status)) {
+    throw new ApiError(400, 'Invalid status. Must be active, expired, or cancelled');
+  }
+  const sub = await Subscription.findById(req.params.id);
+  if (!sub) throw new ApiError(404, 'Subscription not found');
+
+  const previousStatus = sub.status;
+  sub.status = status;
+  await sub.save();
+
+  await writeAudit(req, 'subscription_status_updated', 'Subscription', sub._id, {
+    previousStatus,
+    newStatus: status,
+    note,
+  });
+
+  return success(res, { message: `Subscription status updated to ${status}`, data: sub });
+});
+
+export const adminRestockAlerts = asyncHandler(async (_req, res) => {
+  const pendingAlerts = await RestockAlert.find({ status: 'pending' })
+    .populate('user', 'name email phone')
+    .populate('product', 'name slug thumbnail stock status allowUnlimitedStock variants')
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const grouped = new Map();
+  for (const alert of pendingAlerts) {
+    if (!alert.product) continue;
+    const key = `${alert.product._id}:${alert.variantId || 'base'}`;
+    if (!grouped.has(key)) {
+      let variantName = '';
+      let variantStock = null;
+      if (alert.variantId && alert.product.variants) {
+        const v = alert.product.variants.find((vr) => String(vr._id) === String(alert.variantId));
+        if (v) {
+          variantName = v.name;
+          variantStock = v.stock;
+        }
+      }
+      grouped.set(key, {
+        productId: alert.product._id,
+        productName: alert.product.name,
+        productSlug: alert.product.slug,
+        productThumbnail: alert.product.thumbnail,
+        productStock: alert.product.stock,
+        variantId: alert.variantId || null,
+        variantName,
+        variantStock,
+        totalRequests: 0,
+        requests: [],
+        lastRequestedAt: alert.createdAt,
+      });
+    }
+    const item = grouped.get(key);
+    item.totalRequests += 1;
+    item.requests.push({
+      _id: alert._id,
+      email: alert.email,
+      user: alert.user,
+      createdAt: alert.createdAt,
+    });
+  }
+
+  const data = Array.from(grouped.values()).sort((a, b) => b.totalRequests - a.totalRequests);
+  return success(res, { data, totalPendingAlerts: pendingAlerts.length });
+});
+
+export const adminTriggerRestockAlert = asyncHandler(async (req, res) => {
+  const { variantId } = req.body || {};
+  const productId = req.params.productId;
+  await checkAndTriggerRestockAlerts(productId, variantId || null);
+  await writeAudit(req, 'restock_alert_triggered', 'Product', productId, { variantId });
+  return success(res, { message: 'Restock notifications processed and dispatched to waiting customers' });
+});
+
+export const sendAbandonedCartRecovery = asyncHandler(async (req, res) => {
+  const cart = await Cart.findById(req.params.id).populate('user', 'name email phone');
+  if (!cart) throw new ApiError(404, 'Cart not found');
+  if (!cart.user) throw new ApiError(400, 'Cart has no associated user account');
+
+  const itemCount = (cart.items || []).length;
+  await notifyUser(
+    cart.user._id,
+    'cart_recovery',
+    '🛒 You left items in your cart!',
+    `Hello ${cart.user.name || 'there'}, you still have ${itemCount} item(s) waiting in your cart. Complete your order now before stock runs out!`,
+    '/cart'
+  );
+
+  await writeAudit(req, 'cart_recovery_sent', 'Cart', cart._id, { userId: cart.user._id });
+  return success(res, { message: `Recovery reminder notification sent to ${cart.user.name || cart.user.email}` });
 });

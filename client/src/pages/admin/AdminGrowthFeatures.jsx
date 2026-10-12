@@ -6,9 +6,9 @@ import {
   Delete02Icon,
   Discount01Icon,
   Edit02Icon,
+  BellIcon,
   FloppyDiskIcon,
   GiftIcon,
-  Notification01Icon,
   PackageIcon,
   PlusSignIcon,
   RefreshIcon,
@@ -16,6 +16,12 @@ import {
   StarIcon,
   Ticket01Icon,
   UserShield01Icon,
+  Alert02Icon,
+  CheckmarkCircle01Icon,
+  UserCircleIcon,
+  Search01Icon,
+  ShoppingBag01Icon,
+  Cancel01Icon,
 } from '@hugeicons/core-free-icons'
 import { adminDelete, adminGet, adminPatch, adminPost, adminPut } from '../../api/admin.api'
 import { apiErrorMessage } from '../../api/client'
@@ -31,10 +37,11 @@ const tabs = [
   ['Promotions', 'promotions', StarIcon],
   ['Affiliate Payouts', 'affiliate_payouts', GiftIcon],
   ['Fraud Blacklist', 'fraud_blacklist', Shield01Icon],
+  ['Restock Alerts', 'restock_alerts', BellIcon],
   ['Support', 'support', Ticket01Icon],
   ['Refunds', 'refunds', RefreshIcon],
   ['Reviews', 'reviews', Comment01Icon],
-  ['Notifications', 'notifications', Notification01Icon],
+  ['Notifications', 'notifications', BellIcon],
   ['Abandoned carts', 'abandoned', PackageIcon],
   ['Roles', 'roles', UserShield01Icon],
   ['Settings', 'settings', FloppyDiskIcon],
@@ -68,6 +75,7 @@ export default function AdminGrowthFeatures() {
       {tab === 'promotions' && <Promotions />}
       {tab === 'affiliate_payouts' && <AffiliatePayouts />}
       {tab === 'fraud_blacklist' && <FraudBlacklist />}
+      {tab === 'restock_alerts' && <RestockAlerts />}
       {tab === 'support' && <Support />}
       {tab === 'refunds' && <Refunds />}
       {tab === 'reviews' && <Reviews />}
@@ -104,6 +112,7 @@ function Coupons() {
   const [bundles, setBundles] = useState([])
   const [form, setForm] = useState(emptyCoupon)
   const [editingId, setEditingId] = useState('')
+  const [modalOpen, setModalOpen] = useState(false)
   const { notify } = useToast()
 
   const load = async () => {
@@ -126,6 +135,11 @@ function Coupons() {
     setForm(emptyCoupon)
   }
 
+  const openCreateModal = () => {
+    reset()
+    setModalOpen(true)
+  }
+
   const edit = (coupon) => {
     setEditingId(coupon._id)
     setForm({
@@ -144,7 +158,7 @@ function Coupons() {
       endsAt: toLocalInput(coupon.endsAt),
       active: coupon.active !== false,
     })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    setModalOpen(true)
   }
 
   const save = async (event) => {
@@ -164,6 +178,7 @@ function Coupons() {
       if (editingId) await adminPut(`/features/coupons/${editingId}`, payload)
       else await adminPost('/features/coupons', payload)
       notify(editingId ? 'Coupon updated' : 'Coupon created')
+      setModalOpen(false)
       reset()
       await load()
     } catch (error) {
@@ -184,22 +199,57 @@ function Coupons() {
   }
 
   return (
-    <Two>
-      <FormCard title={editingId ? 'Edit coupon' : 'Create coupon'}>
-        <form onSubmit={save} className="space-y-4">
-          <Input label="Code" value={form.code} set={(value) => setForm({ ...form, code: value.toUpperCase() })} required />
-          <Input label="Description" value={form.description} set={(value) => setForm({ ...form, description: value })} />
+    <>
+      <ListCard
+        title={`Discount Coupons (${rows.length})`}
+        action={
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="hexa-btn text-xs flex items-center gap-1.5 !py-2 !px-3.5"
+          >
+            <HugeiconsIcon icon={PlusSignIcon} size={15} /> Add Coupon
+          </button>
+        }
+      >
+        {rows.length ? rows.map((coupon) => (
+          <Row
+            key={coupon._id}
+            title={
+              <span className="flex items-center gap-2">
+                <span className="font-mono font-bold text-purple-300">{coupon.code}</span>
+                <span className="rounded bg-purple-500/15 border border-purple-500/30 px-2 py-0.5 text-[10px] font-bold text-purple-300 uppercase">
+                  {coupon.type === 'percent' ? `${coupon.value}% OFF` : `৳${coupon.value} OFF`}
+                </span>
+              </span>
+            }
+            sub={`${coupon.description ? `${coupon.description} · ` : ''}Used: ${coupon.usedCount}/${coupon.usageLimit || '∞'} · Targets: ${targetSummary(coupon.allowedProducts, coupon.allowedCategories, coupon.allowedBundles)}`}
+            status={coupon.active ? 'active' : 'inactive'}
+            actions={<CrudActions onEdit={() => edit(coupon)} onDelete={() => remove(coupon)} />}
+          />
+        )) : <EmptyAdminRow text="No coupons yet. Click 'Add Coupon' above to create one." />}
+      </ListCard>
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editingId ? `Edit Coupon: ${form.code}` : 'Create Discount Coupon'}
+        maxWidth="max-w-2xl"
+      >
+        <form onSubmit={save} className="space-y-4 text-xs">
+          <Input label="Coupon Code *" value={form.code} set={(value) => setForm({ ...form, code: value.toUpperCase() })} placeholder="e.g. SUMMER50, WELCOME10" required />
+          <Input label="Description / Internal Label" value={form.description} set={(value) => setForm({ ...form, description: value })} placeholder="e.g. 10% off store-wide promotion" />
           <div className="grid grid-cols-2 gap-3">
-            <Select label="Type" value={form.type} set={(value) => setForm({ ...form, type: value })} options={['percent', 'fixed']} />
-            <Input label="Value" type="number" value={form.value} set={(value) => setForm({ ...form, value: Number(value) })} required />
-            <Input label="Minimum order" type="number" value={form.minOrder} set={(value) => setForm({ ...form, minOrder: Number(value) })} />
-            <Input label="Max discount (0 = none)" type="number" value={form.maxDiscount} set={(value) => setForm({ ...form, maxDiscount: Number(value) })} />
-            <Input label="Total usage limit (0 = unlimited)" type="number" value={form.usageLimit} set={(value) => setForm({ ...form, usageLimit: Number(value) })} />
-            <Input label="Per user limit" type="number" value={form.perUserLimit} set={(value) => setForm({ ...form, perUserLimit: Number(value) })} />
+            <Select label="Discount Type" value={form.type} set={(value) => setForm({ ...form, type: value })} options={['percent', 'fixed']} />
+            <Input label={form.type === 'percent' ? 'Discount Percentage (%) *' : 'Fixed Discount Amount (৳) *'} type="number" value={form.value} set={(value) => setForm({ ...form, value: Number(value) })} required />
+            <Input label="Minimum Order Subtotal (৳)" type="number" value={form.minOrder} set={(value) => setForm({ ...form, minOrder: Number(value) })} />
+            <Input label="Maximum Discount Cap (৳, 0 = no cap)" type="number" value={form.maxDiscount} set={(value) => setForm({ ...form, maxDiscount: Number(value) })} />
+            <Input label="Total Store Usage Limit (0 = unlimited)" type="number" value={form.usageLimit} set={(value) => setForm({ ...form, usageLimit: Number(value) })} />
+            <Input label="Per-User Usage Limit" type="number" value={form.perUserLimit} set={(value) => setForm({ ...form, perUserLimit: Number(value) })} />
           </div>
 
           <TargetEditor
-            title="Coupon targets (leave empty for all items)"
+            title="Targeted Items (leave unselected to apply to all products)"
             products={products}
             categories={categories}
             bundles={bundles}
@@ -212,30 +262,22 @@ function Coupons() {
           />
 
           <div className="grid grid-cols-2 gap-3">
-            <DateInput label="Starts at" value={form.startsAt} set={(value) => setForm({ ...form, startsAt: value })} />
-            <DateInput label="Ends at" value={form.endsAt} set={(value) => setForm({ ...form, endsAt: value })} />
+            <DateInput label="Active From (Starts at)" value={form.startsAt} set={(value) => setForm({ ...form, startsAt: value })} />
+            <DateInput label="Expires At (Ends at)" value={form.endsAt} set={(value) => setForm({ ...form, endsAt: value })} />
           </div>
-          <Checkbox label="Active" checked={form.active} set={(active) => setForm({ ...form, active })} />
+          <Checkbox label="Coupon is Active & Redeemable" checked={form.active} set={(active) => setForm({ ...form, active })} />
 
-          <div className="flex gap-2">
-            <button className="hexa-btn flex-1"><HugeiconsIcon icon={FloppyDiskIcon} size={15} />{editingId ? 'Update coupon' : 'Create coupon'}</button>
-            {editingId && <button type="button" onClick={reset} className="hexa-btn-secondary">Cancel</button>}
+          <div className="flex justify-end gap-2 pt-2 border-t border-[var(--hexa-border)]">
+            <button type="button" onClick={() => setModalOpen(false)} className="hexa-btn-secondary text-xs">
+              Cancel
+            </button>
+            <button type="submit" className="hexa-btn text-xs !py-2 !px-4">
+              <HugeiconsIcon icon={FloppyDiskIcon} size={15} /> {editingId ? 'Save Changes' : 'Create Coupon'}
+            </button>
           </div>
         </form>
-      </FormCard>
-
-      <ListCard title="Coupons">
-        {rows.length ? rows.map((coupon) => (
-          <Row
-            key={coupon._id}
-            title={coupon.code}
-            sub={`${coupon.type} ${coupon.value} · used ${coupon.usedCount}/${coupon.usageLimit || '∞'} · ${targetSummary(coupon.allowedProducts, coupon.allowedCategories, coupon.allowedBundles)}`}
-            status={coupon.active ? 'active' : 'inactive'}
-            actions={<CrudActions onEdit={() => edit(coupon)} onDelete={() => remove(coupon)} />}
-          />
-        )) : <EmptyAdminRow text="No coupons yet." />}
-      </ListCard>
-    </Two>
+      </Modal>
+    </>
   )
 }
 
@@ -265,6 +307,7 @@ function Bundles() {
   const [products, setProducts] = useState([])
   const [form, setForm] = useState(emptyBundle)
   const [editingId, setEditingId] = useState('')
+  const [modalOpen, setModalOpen] = useState(false)
   const { notify } = useToast()
 
   const load = async () => {
@@ -281,6 +324,11 @@ function Bundles() {
   const reset = () => {
     setEditingId('')
     setForm({ ...emptyBundle, items: [newBundleComponent(), newBundleComponent()] })
+  }
+
+  const openCreateModal = () => {
+    reset()
+    setModalOpen(true)
   }
 
   const edit = (bundle) => {
@@ -305,7 +353,7 @@ function Bundles() {
         quantity: Number(item.quantity || 1),
       })),
     })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    setModalOpen(true)
   }
 
   const updateComponent = (index, patch) => {
@@ -358,6 +406,7 @@ function Bundles() {
       if (editingId) await adminPut(`/features/bundles/${editingId}`, payload)
       else await adminPost('/features/bundles', payload)
       notify(editingId ? 'Bundle updated' : 'Bundle created')
+      setModalOpen(false)
       reset()
       await load()
     } catch (error) {
@@ -378,55 +427,105 @@ function Bundles() {
   }
 
   return (
-    <Two wideForm>
-      <FormCard title={editingId ? 'Edit bundle' : 'Create first-class bundle'}>
-        <form onSubmit={save} className="space-y-4">
+    <>
+      <ListCard
+        title={`Product Bundles (${rows.length})`}
+        action={
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="hexa-btn text-xs flex items-center gap-1.5 !py-2 !px-3.5"
+          >
+            <HugeiconsIcon icon={PlusSignIcon} size={15} /> Add Bundle
+          </button>
+        }
+      >
+        {rows.length ? rows.map((bundle) => (
+          <Row
+            key={bundle._id}
+            title={
+              <span className="flex items-center gap-2">
+                <span className="font-bold text-white">{bundle.name}</span>
+                {bundle.badge && (
+                  <span className="rounded bg-emerald-500/15 border border-emerald-500/30 px-2 py-0.5 text-[10px] font-bold text-emerald-400 uppercase">
+                    {bundle.badge}
+                  </span>
+                )}
+                {bundle.featured && (
+                  <span className="rounded bg-purple-500/15 border border-purple-500/30 px-1.5 py-0.5 text-[10px] font-bold text-purple-300">
+                    Featured
+                  </span>
+                )}
+              </span>
+            }
+            sub={`${bundle.items?.length || 0} component(s) included · Sale Price: ৳${Number(bundle.salePrice || 0).toLocaleString()} ${bundle.regularPrice ? `(Regular: ৳${Number(bundle.regularPrice).toLocaleString()})` : ''} · ${bundle.shortDescription || bundle.subtitle || ''}`}
+            status={bundle.status}
+            actions={<CrudActions onEdit={() => edit(bundle)} onDelete={() => remove(bundle)} />}
+          />
+        )) : <EmptyAdminRow text="No product bundles created yet. Click 'Add Bundle' above." />}
+      </ListCard>
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editingId ? `Edit Bundle: ${form.name}` : 'Create First-Class Bundle'}
+        maxWidth="max-w-3xl"
+      >
+        <form onSubmit={save} className="space-y-4 text-xs">
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input label="Bundle name *" value={form.name} set={(name) => setForm({ ...form, name })} required />
-            <Input label="Slug (optional)" value={form.slug} set={(slug) => setForm({ ...form, slug })} />
+            <Input label="Bundle Name *" value={form.name} set={(name) => setForm({ ...form, name })} placeholder="e.g. Creator Ultimate Pack" required />
+            <Input label="URL Slug (optional)" value={form.slug} set={(slug) => setForm({ ...form, slug })} placeholder="e.g. creator-ultimate-pack" />
           </div>
-          <Input label="Subtitle / short hook" value={form.subtitle} set={(subtitle) => setForm({ ...form, subtitle })} />
-          <TextArea label="Description" value={form.description} set={(description) => setForm({ ...form, description })} />
+          <Input label="Subtitle / Short Hook" value={form.subtitle} set={(subtitle) => setForm({ ...form, subtitle })} placeholder="e.g. Netflix Premium + Spotify Duo combo" />
+          <TextArea label="Full Description" value={form.description} set={(description) => setForm({ ...form, description })} rows={2} />
 
           <div className="grid gap-3 sm:grid-cols-3">
-            <Input label="Bundle sale price (৳) *" type="number" value={form.price} set={(price) => setForm({ ...form, price })} required />
-            <Input label="Original / strike price (৳)" type="number" value={form.regularPrice} set={(regularPrice) => setForm({ ...form, regularPrice })} />
-            <Input label="Badge (e.g. SAVE 25%)" value={form.badge} set={(badge) => setForm({ ...form, badge })} />
+            <Input label="Bundle Sale Price (৳) *" type="number" value={form.price} set={(price) => setForm({ ...form, price })} required />
+            <Input label="Original / Strike Price (৳)" type="number" value={form.regularPrice} set={(regularPrice) => setForm({ ...form, regularPrice })} />
+            <Input label="Promotional Badge" value={form.badge} set={(badge) => setForm({ ...form, badge })} placeholder="e.g. SAVE 25%" />
           </div>
 
-          <div className="rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-bg-soft)] p-3">
-            <Input label="Banner image URL" value={form.bannerImageUrl} set={(bannerImageUrl) => setForm({ ...form, bannerImageUrl })} />
+          <div className="rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-surface)]/60 p-3">
+            <Input label="Banner Image URL" value={form.bannerImageUrl} set={(bannerImageUrl) => setForm({ ...form, bannerImageUrl })} placeholder="https://..." />
           </div>
 
-          <div>
-            <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-card)] p-3 space-y-3">
+            <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold">Bundle components</p>
-                <p className="text-xs text-[var(--hexa-muted)]">Choose product/plan and quantity. Customers see one bundle; stock is deducted from these components.</p>
+                <p className="text-xs font-bold text-white">Bundle Components (Minimum 2)</p>
+                <p className="text-[11px] text-[var(--hexa-muted)]">Choose products/variants and quantities that comprise this bundle.</p>
               </div>
-              <button type="button" onClick={() => setForm({ ...form, items: [...form.items, newBundleComponent()] })} className="hexa-btn-secondary !px-3 !py-2 text-xs"><HugeiconsIcon icon={PlusSignIcon} size={14} />Add</button>
+              <button
+                type="button"
+                onClick={() => setForm({ ...form, items: [...form.items, newBundleComponent()] })}
+                className="hexa-btn-secondary !px-2.5 !py-1 text-xs flex items-center gap-1"
+              >
+                <HugeiconsIcon icon={PlusSignIcon} size={14} /> Add Component
+              </button>
             </div>
             <div className="space-y-2">
               {form.items.map((item, index) => {
                 const product = products.find((entry) => entry._id === item.product)
                 const variants = (product?.variants || []).filter((variant) => variant.active)
                 return (
-                  <div key={`${index}-${item.product}-${item.variantId}`} className="grid gap-2 rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-bg-soft)] p-3 sm:grid-cols-[1fr_1fr_100px_42px]">
+                  <div key={`${index}-${item.product}-${item.variantId}`} className="grid gap-2 rounded-xl border border-white/5 bg-white/[0.02] p-2.5 sm:grid-cols-[1fr_1fr_90px_36px] items-center">
                     <select
-                      className="hexa-input"
+                      className="hexa-input text-xs"
                       value={item.product}
                       onChange={(event) => updateComponent(index, { product: event.target.value, variantId: '' })}
                       required
                     >
-                      <option value="">Choose product</option>
+                      <option value="">Select product...</option>
                       {products.filter((entry) => entry.status !== 'archived').map((entry) => <option key={entry._id} value={entry._id}>{entry.name}</option>)}
                     </select>
-                    <select className="hexa-input" value={item.variantId} onChange={(event) => updateComponent(index, { variantId: event.target.value })}>
-                      <option value="">Base product</option>
+                    <select className="hexa-input text-xs" value={item.variantId} onChange={(event) => updateComponent(index, { variantId: event.target.value })}>
+                      <option value="">Base product / Default</option>
                       {variants.map((variant) => <option key={variant._id} value={variant._id}>{variant.name}</option>)}
                     </select>
-                    <input className="hexa-input" type="number" min="1" max="20" value={item.quantity} onChange={(event) => updateComponent(index, { quantity: Number(event.target.value) })} aria-label="Component quantity" />
-                    <button type="button" onClick={() => removeComponent(index)} disabled={form.items.length <= 2} className="rounded-xl text-rose-500 transition hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-30" aria-label="Remove component"><HugeiconsIcon icon={Delete02Icon} size={14} className="mx-auto" /></button>
+                    <input className="hexa-input text-xs" type="number" min="1" max="20" value={item.quantity} onChange={(event) => updateComponent(index, { quantity: Number(event.target.value) })} title="Quantity per bundle" placeholder="Qty" />
+                    <button type="button" onClick={() => removeComponent(index)} disabled={form.items.length <= 2} className="rounded-lg p-1.5 text-rose-400 transition hover:bg-rose-500/10 disabled:opacity-20 disabled:cursor-not-allowed" title="Remove component">
+                      <HugeiconsIcon icon={Delete02Icon} size={15} className="mx-auto" />
+                    </button>
                   </div>
                 )
               })}
@@ -435,31 +534,23 @@ function Bundles() {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <Select label="Status" value={form.status} set={(status) => setForm({ ...form, status })} options={['active', 'inactive', 'archived']} />
-            <Input label="Tags (comma separated)" value={form.tags} set={(tags) => setForm({ ...form, tags })} />
-            <DateInput label="Starts at" value={form.startsAt} set={(startsAt) => setForm({ ...form, startsAt })} />
-            <DateInput label="Ends at" value={form.endsAt} set={(endsAt) => setForm({ ...form, endsAt })} />
+            <Input label="Tags (comma separated)" value={form.tags} set={(tags) => setForm({ ...form, tags })} placeholder="gaming, streaming" />
+            <DateInput label="Starts At" value={form.startsAt} set={(startsAt) => setForm({ ...form, startsAt })} />
+            <DateInput label="Ends At" value={form.endsAt} set={(endsAt) => setForm({ ...form, endsAt })} />
           </div>
-          <Checkbox label="Featured bundle" checked={form.featured} set={(featured) => setForm({ ...form, featured })} />
+          <Checkbox label="Feature on storefront homepage & highlights" checked={form.featured} set={(featured) => setForm({ ...form, featured })} />
 
-          <div className="flex gap-2">
-            <button className="hexa-btn flex-1"><HugeiconsIcon icon={FloppyDiskIcon} size={15} />{editingId ? 'Update bundle' : 'Create bundle'}</button>
-            {editingId && <button type="button" onClick={reset} className="hexa-btn-secondary">Cancel</button>}
+          <div className="flex justify-end gap-2 pt-2 border-t border-[var(--hexa-border)]">
+            <button type="button" onClick={() => setModalOpen(false)} className="hexa-btn-secondary text-xs">
+              Cancel
+            </button>
+            <button type="submit" className="hexa-btn text-xs !py-2 !px-4">
+              <HugeiconsIcon icon={FloppyDiskIcon} size={15} /> {editingId ? 'Save Changes' : 'Create Bundle'}
+            </button>
           </div>
         </form>
-      </FormCard>
-
-      <ListCard title="Bundles">
-        {rows.length ? rows.map((bundle) => (
-          <Row
-            key={bundle._id}
-            title={bundle.name}
-            sub={`${bundle.items?.length || 0} components · ৳${Number(bundle.salePrice || bundle.regularPrice || 0).toLocaleString()} · ${bundle.featured ? 'featured' : 'standard'}`}
-            status={bundle.status}
-            actions={<CrudActions onEdit={() => edit(bundle)} onDelete={() => remove(bundle)} />}
-          />
-        )) : <EmptyAdminRow text="No bundles yet." />}
-      </ListCard>
-    </Two>
+      </Modal>
+    </>
   )
 }
 
@@ -490,6 +581,7 @@ function Promotions() {
   const [bundles, setBundles] = useState([])
   const [form, setForm] = useState(emptyPromotion)
   const [editingId, setEditingId] = useState('')
+  const [modalOpen, setModalOpen] = useState(false)
   const { notify } = useToast()
 
   const load = async () => {
@@ -510,6 +602,7 @@ function Promotions() {
   const reset = () => {
     setEditingId('')
     setForm(emptyPromotion)
+    setModalOpen(false)
   }
 
   const edit = (promotion) => {
@@ -533,7 +626,7 @@ function Promotions() {
       active: promotion.active !== false,
       displayOrder: Number(promotion.displayOrder || 0),
     })
-    window.scrollTo({ top: 0, behavior: 'smooth' })
+    setModalOpen(true)
   }
 
   const save = async (event) => {
@@ -587,8 +680,42 @@ function Promotions() {
   }
 
   return (
-    <Two wideForm>
-      <FormCard title={editingId ? 'Edit campaign' : 'Create campaign'}>
+    <>
+      <ListCard
+        title="Promotions / campaigns"
+        action={
+          <button
+            onClick={() => {
+              reset()
+              setModalOpen(true)
+            }}
+            className="hexa-btn text-xs !py-2 !px-3"
+          >
+            <HugeiconsIcon icon={PlusSignIcon} size={15} /> Create Campaign
+          </button>
+        }
+      >
+        {rows.length ? (
+          rows.map((promotion) => (
+            <Row
+              key={promotion._id}
+              title={promotion.headline || promotion.name}
+              sub={`${promotion.discountType === 'display_only' ? 'Display campaign' : `${promotion.discountType} ${promotion.discountValue}`} · ${promotion.scope || 'targeted'} · ${targetSummary(promotion.products, promotion.categories, promotion.bundles)}`}
+              status={promotion.active ? 'active' : 'inactive'}
+              actions={<CrudActions onEdit={() => edit(promotion)} onDelete={() => remove(promotion)} />}
+            />
+          ))
+        ) : (
+          <EmptyAdminRow text="No campaigns yet." />
+        )}
+      </ListCard>
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editingId ? 'Edit Campaign' : 'Create Campaign'}
+        maxWidth="max-w-2xl"
+      >
         <form onSubmit={save} className="space-y-4">
           <Input label="Campaign name" value={form.name} set={(name) => setForm({ ...form, name })} required />
           <Input label="Headline" value={form.headline} set={(headline) => setForm({ ...form, headline })} />
@@ -628,89 +755,663 @@ function Promotions() {
           </div>
           <Checkbox label="Active" checked={form.active} set={(active) => setForm({ ...form, active })} />
 
-          <div className="flex gap-2">
-            <button className="hexa-btn flex-1"><HugeiconsIcon icon={FloppyDiskIcon} size={15} />{editingId ? 'Update campaign' : 'Create campaign'}</button>
-            {editingId && <button type="button" onClick={reset} className="hexa-btn-secondary">Cancel</button>}
+          <div className="flex justify-end gap-2 pt-2 border-t border-[var(--hexa-border)]">
+            <button type="button" onClick={() => setModalOpen(false)} className="hexa-btn-secondary text-xs">
+              Cancel
+            </button>
+            <button type="submit" className="hexa-btn text-xs !py-2 !px-4">
+              <HugeiconsIcon icon={FloppyDiskIcon} size={15} /> {editingId ? 'Save Changes' : 'Create Campaign'}
+            </button>
           </div>
         </form>
-      </FormCard>
-
-      <ListCard title="Promotions / campaigns">
-        {rows.length ? rows.map((promotion) => (
-          <Row
-            key={promotion._id}
-            title={promotion.headline || promotion.name}
-            sub={`${promotion.discountType === 'display_only' ? 'Display campaign' : `${promotion.discountType} ${promotion.discountValue}`} · ${promotion.scope || 'targeted'} · ${targetSummary(promotion.products, promotion.categories, promotion.bundles)}`}
-            status={promotion.active ? 'active' : 'inactive'}
-            actions={<CrudActions onEdit={() => edit(promotion)} onDelete={() => remove(promotion)} />}
-          />
-        )) : <EmptyAdminRow text="No campaigns yet." />}
-      </ListCard>
-    </Two>
+      </Modal>
+    </>
   )
 }
 
 function Support() {
   const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [statusFilter, setStatusFilter] = useState('all')
+  const [priorityFilter, setPriorityFilter] = useState('all')
+  const [escalationFilter, setEscalationFilter] = useState('all')
+  const [activeTicket, setActiveTicket] = useState(null)
+  const [ticketDetails, setTicketDetails] = useState(null)
+  const [replyMessage, setReplyMessage] = useState('')
+  const [replyStatus, setReplyStatus] = useState('waiting_customer')
+  const [replyPriority, setReplyPriority] = useState('medium')
+  const [sending, setSending] = useState(false)
+  const [analyzingAi, setAnalyzingAi] = useState(false)
   const { notify } = useToast()
-  const load = () => adminGet('/features/support-tickets').then((response) => setRows(response.data || []))
-  useEffect(() => { load().catch(() => {}) }, [])
 
-  const reply = async (ticket) => {
-    const message = window.prompt(`Reply to ${ticket.ticketNumber}`)
-    if (!message) return
+  const load = () => {
+    setLoading(true)
+    const params = {}
+    if (statusFilter !== 'all') params.status = statusFilter
+    if (escalationFilter === 'escalated') params.needsAdmin = 'true'
+    adminGet('/features/support-tickets', params)
+      .then((res) => setRows(res.data || []))
+      .catch((err) => notify(apiErrorMessage(err), 'error'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [statusFilter, escalationFilter])
+
+  const openTicketModal = async (ticket) => {
+    setActiveTicket(ticket)
+    setTicketDetails(null)
+    setReplyMessage('')
+    setReplyStatus(ticket.status || 'waiting_customer')
+    setReplyPriority(ticket.priority || 'medium')
     try {
-      await adminPost(`/features/support-tickets/${ticket._id}/replies`, { message, status: 'waiting_customer' })
-      notify('Reply sent')
-      load()
-    } catch (error) {
-      notify(apiErrorMessage(error), 'error')
+      const res = await adminGet(`/features/support-tickets/${ticket._id}`)
+      setTicketDetails(res.data)
+      setReplyStatus(res.data.status || 'waiting_customer')
+      setReplyPriority(res.data.priority || 'medium')
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
     }
   }
 
+  const handleSendReply = async (e) => {
+    e.preventDefault()
+    if (!replyMessage.trim() || !activeTicket) return
+    setSending(true)
+    try {
+      await adminPost(`/features/support-tickets/${activeTicket._id}/replies`, {
+        message: replyMessage.trim(),
+        status: replyStatus,
+      })
+      if (replyPriority !== ticketDetails?.priority) {
+        await adminPatch(`/features/support-tickets/${activeTicket._id}/status`, {
+          priority: replyPriority,
+          status: replyStatus,
+        }).catch(() => {})
+      }
+      notify('Reply sent successfully', 'success')
+      setReplyMessage('')
+      const res = await adminGet(`/features/support-tickets/${activeTicket._id}`)
+      setTicketDetails(res.data)
+      load()
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const handleStatusChange = async (status) => {
+    if (!activeTicket) return
+    try {
+      await adminPatch(`/features/support-tickets/${activeTicket._id}/status`, { status })
+      notify(`Ticket status set to ${status}`, 'success')
+      setReplyStatus(status)
+      if (ticketDetails) setTicketDetails({ ...ticketDetails, status })
+      load()
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
+    }
+  }
+
+  const handleAiAnalyze = async () => {
+    if (!activeTicket) return
+    setAnalyzingAi(true)
+    try {
+      const res = await adminPost(`/features/support-tickets/${activeTicket._id}/ai-analyze`)
+      const data = res.data || {}
+      if (data.draftReply) {
+        setReplyMessage(data.draftReply)
+      }
+      if (data.suggestedStatus) {
+        setReplyStatus(data.suggestedStatus)
+      }
+      if (data.suggestedPriority) {
+        setReplyPriority(data.suggestedPriority)
+      }
+      if (data.adminReport) {
+        setTicketDetails((prev) => ({
+          ...prev,
+          aiReport: data.adminReport,
+        }))
+      }
+      notify('AI agent analysis complete! Suggested reply drafted.', 'success')
+      load()
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
+    } finally {
+      setAnalyzingAi(false)
+    }
+  }
+
+  const filteredRows = rows.filter((r) => {
+    if (priorityFilter !== 'all' && r.priority !== priorityFilter) return false
+    if (escalationFilter === 'ai_handled' && !r.aiHandled) return false
+    return true
+  })
+
+  const currentReport = ticketDetails?.aiReport || activeTicket?.aiReport
+
   return (
-    <ListCard title="Customer support tickets">
-      {rows.length ? rows.map((ticket) => (
-        <Row key={ticket._id} title={`${ticket.ticketNumber} · ${ticket.subject}`} sub={`${ticket.user?.name || ''} · ${ticket.category} · ${ticket.priority}`} status={ticket.status} actions={<button onClick={() => reply(ticket)} className="text-xs font-semibold text-purple-600">Reply</button>} />
-      )) : <EmptyAdminRow text="No support tickets." />}
-    </ListCard>
+    <>
+      <ListCard
+        title={`Customer Support Tickets (${filteredRows.length})`}
+        action={
+          <div className="flex items-center gap-2">
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="hexa-input !py-1 text-xs"
+            >
+              <option value="all">All Statuses</option>
+              <option value="open">Open</option>
+              <option value="in_progress">In Progress</option>
+              <option value="waiting_customer">Waiting Customer</option>
+              <option value="closed">Closed / Resolved</option>
+            </select>
+            <select
+              value={escalationFilter}
+              onChange={(e) => setEscalationFilter(e.target.value)}
+              className="hexa-input !py-1 text-xs"
+            >
+              <option value="all">All Channels</option>
+              <option value="escalated">⚠️ AI Escalated Only</option>
+              <option value="ai_handled">🤖 AI Handled</option>
+            </select>
+            <select
+              value={priorityFilter}
+              onChange={(e) => setPriorityFilter(e.target.value)}
+              className="hexa-input !py-1 text-xs"
+            >
+              <option value="all">All Priorities</option>
+              <option value="urgent">Urgent</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+            <button onClick={load} className="hexa-btn-secondary !py-1 text-xs">
+              <HugeiconsIcon icon={RefreshIcon} size={14} />
+            </button>
+          </div>
+        }
+      >
+        {loading ? (
+          <EmptyAdminRow text="Loading support tickets..." />
+        ) : filteredRows.length ? (
+          filteredRows.map((ticket) => {
+            const needsAction = Boolean(ticket.aiReport?.needsAdminAction)
+            return (
+              <div
+                key={ticket._id}
+                className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 transition ${
+                  needsAction
+                    ? 'bg-amber-500/[0.07] border-l-4 border-amber-500 hover:bg-amber-500/[0.12]'
+                    : 'hover:bg-[var(--hexa-surface)]/50'
+                }`}
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-mono font-bold text-xs text-purple-400">{ticket.ticketNumber}</span>
+                    <span className="font-semibold text-sm text-[var(--hexa-text)]">{ticket.subject}</span>
+                    <StatusBadge value={ticket.status} />
+                    <span className={`rounded-md px-2 py-0.5 text-[10px] font-bold uppercase ${
+                      ticket.priority === 'urgent' ? 'bg-rose-500/20 text-rose-400' :
+                      ticket.priority === 'high' ? 'bg-amber-500/20 text-amber-400' :
+                      'bg-slate-500/20 text-slate-400'
+                    }`}>
+                      {ticket.priority || 'medium'}
+                    </span>
+
+                    {needsAction && (
+                      <span className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[10px] font-extrabold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse">
+                        <span>⚠️</span> AI Escalated: Action Required
+                      </span>
+                    )}
+
+                    {!needsAction && ticket.aiHandled && (
+                      <span className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[10px] font-medium bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
+                        <span>🤖</span> AI Handled
+                      </span>
+                    )}
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-3 text-xs text-[var(--hexa-muted)]">
+                    <span>Customer: <strong className="text-[var(--hexa-text)]">{ticket.user?.name || 'Customer'}</strong> ({ticket.user?.email || '—'})</span>
+                    <span>Category: {ticket.category || 'General'}</span>
+                    {ticket.aiReport?.sentiment && (
+                      <span className="capitalize">Sentiment: <span className="text-gray-300 font-medium">{ticket.aiReport.sentiment}</span></span>
+                    )}
+                    <span>Last activity: {new Date(ticket.lastReplyAt || ticket.createdAt).toLocaleString()}</span>
+                  </div>
+                </div>
+                <div className="shrink-0 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openTicketModal(ticket)}
+                    className="hexa-btn !py-1.5 !px-3 text-xs font-bold"
+                  >
+                    View & Reply
+                  </button>
+                </div>
+              </div>
+            )
+          })
+        ) : (
+          <EmptyAdminRow text="No support tickets found matching the criteria." />
+        )}
+      </ListCard>
+
+      {/* Ticket Conversation Modal */}
+      <Modal
+        open={Boolean(activeTicket)}
+        onClose={() => setActiveTicket(null)}
+        title={activeTicket ? `Ticket ${activeTicket.ticketNumber}: ${activeTicket.subject}` : 'Support Ticket'}
+        maxWidth="max-w-2xl"
+      >
+        {activeTicket && (
+          <div className="space-y-4 text-xs">
+            {/* Header info */}
+            <div className="rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-surface)]/60 p-3 space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-gray-200">{ticketDetails?.user?.name || activeTicket.user?.name}</span>
+                  <span className="text-gray-400">({ticketDetails?.user?.email || activeTicket.user?.email})</span>
+                  {ticketDetails?.user?.phone && <span className="text-gray-400">· {ticketDetails.user.phone}</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  <StatusBadge value={ticketDetails?.status || activeTicket.status} />
+                  <span className="rounded px-2 py-0.5 text-[10px] font-bold uppercase bg-purple-500/15 text-purple-300">
+                    {ticketDetails?.priority || activeTicket.priority}
+                  </span>
+                </div>
+              </div>
+              {ticketDetails?.order && (
+                <p className="text-purple-400 font-mono">Linked Order: #{ticketDetails.order.orderNumber || ticketDetails.order}</p>
+              )}
+            </div>
+
+            {/* AI Diagnostics & Escalation Report Card */}
+            {currentReport && (currentReport.issueSummary || currentReport.needsAdminAction) && (
+              <div className={`rounded-xl border p-3.5 space-y-2.5 transition ${
+                currentReport.needsAdminAction
+                  ? 'border-amber-500/40 bg-gradient-to-br from-amber-500/15 via-rose-950/20 to-black/40 text-amber-100 shadow-md'
+                  : 'border-cyan-500/30 bg-cyan-950/20 text-cyan-100'
+              }`}>
+                <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/10 pb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-base">{currentReport.needsAdminAction ? '⚠️' : '🤖'}</span>
+                    <span className="font-bold text-xs">
+                      {currentReport.needsAdminAction
+                        ? 'AI Escalation Report — Administrative Action Required'
+                        : 'AI Support Agent Diagnosis (Self-Resolved / In Progress)'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[10px]">
+                    {currentReport.sentiment && (
+                      <span className="rounded px-2 py-0.5 font-semibold uppercase bg-white/10 text-gray-200">
+                        Sentiment: {currentReport.sentiment}
+                      </span>
+                    )}
+                    {currentReport.urgency && (
+                      <span className={`rounded px-2 py-0.5 font-bold uppercase ${
+                        currentReport.urgency === 'urgent' ? 'bg-rose-500/30 text-rose-300' :
+                        currentReport.urgency === 'high' ? 'bg-amber-500/30 text-amber-300' : 'bg-slate-500/20 text-slate-300'
+                      }`}>
+                        Urgency: {currentReport.urgency}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {currentReport.issueSummary && (
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase text-gray-400 tracking-wider">Issue Summary:</span>
+                    <p className="text-xs text-gray-200 mt-0.5 leading-relaxed">{currentReport.issueSummary}</p>
+                  </div>
+                )}
+
+                {currentReport.escalationReason && (
+                  <div>
+                    <span className="text-[10px] font-semibold uppercase text-amber-300/90 tracking-wider">Escalation Trigger:</span>
+                    <p className="text-xs text-amber-200 mt-0.5 leading-relaxed">{currentReport.escalationReason}</p>
+                  </div>
+                )}
+
+                {currentReport.recommendedAction && (
+                  <div className="rounded-lg bg-black/40 border border-emerald-500/30 p-2.5">
+                    <span className="text-[10px] font-bold uppercase text-emerald-400 tracking-wider flex items-center gap-1.5">
+                      <span>🛠️</span> Recommended Administrator Action:
+                    </span>
+                    <p className="text-xs text-emerald-200 font-medium mt-1 leading-relaxed">{currentReport.recommendedAction}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Conversation Messages Thread */}
+            <div className="max-h-[350px] overflow-y-auto space-y-3 p-3 rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-card)] custom-scrollbar">
+              <div className="rounded-xl p-3 bg-white/[0.04] border border-white/5 space-y-1">
+                <div className="flex items-center justify-between text-[11px] text-gray-400">
+                  <span className="font-semibold text-gray-200">{activeTicket.user?.name || 'Customer'} (Original Inquiry)</span>
+                  <span>{new Date(activeTicket.createdAt).toLocaleString()}</span>
+                </div>
+                <p className="text-sm text-gray-200 whitespace-pre-wrap">{ticketDetails?.description || activeTicket.description || activeTicket.subject}</p>
+              </div>
+
+              {(ticketDetails?.messages || []).map((msg, i) => {
+                const isAi = Boolean(msg.isAi)
+                const isAdmin = !isAi && (msg.isAdmin || msg.sender?.role === 'admin')
+                return (
+                  <div
+                    key={i}
+                    className={`rounded-xl p-3 space-y-1 max-w-[88%] ${
+                      isAi
+                        ? 'ml-auto bg-cyan-950/40 border border-cyan-500/30 text-cyan-100 shadow-sm'
+                        : isAdmin
+                        ? 'ml-auto bg-purple-600/15 border border-purple-500/30'
+                        : 'mr-auto bg-white/[0.04] border border-white/5'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-3 text-[11px]">
+                      <span className={`font-bold ${isAi ? 'text-cyan-300' : isAdmin ? 'text-purple-300' : 'text-gray-300'}`}>
+                        {isAi ? '🤖 HEXA AI Support Assistant' : isAdmin ? '🛡️ HEXA Staff Support' : (msg.sender?.name || activeTicket.user?.name || 'Customer')}
+                      </span>
+                      <span className="text-gray-400 text-[10px]">{msg.createdAt ? new Date(msg.createdAt).toLocaleString() : ''}</span>
+                    </div>
+                    <p className="text-xs text-gray-200 whitespace-pre-wrap leading-relaxed">{msg.message}</p>
+                  </div>
+                )
+              })}
+            </div>
+
+            {/* Reply and status form */}
+            <form onSubmit={handleSendReply} className="space-y-3 pt-2 border-t border-[var(--hexa-border)]">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-400 mb-1">Set Ticket Status on Reply</label>
+                  <select
+                    value={replyStatus}
+                    onChange={(e) => setReplyStatus(e.target.value)}
+                    className="hexa-input !py-1 text-xs"
+                  >
+                    <option value="waiting_customer">Waiting for Customer</option>
+                    <option value="in_progress">In Progress / Investigating</option>
+                    <option value="resolved">Resolved / Complete</option>
+                    <option value="closed">Closed</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-semibold text-gray-400 mb-1">Priority</label>
+                  <select
+                    value={replyPriority}
+                    onChange={(e) => setReplyPriority(e.target.value)}
+                    className="hexa-input !py-1 text-xs"
+                  >
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-[11px] font-semibold text-gray-300">Admin Response</label>
+                  <button
+                    type="button"
+                    disabled={analyzingAi}
+                    onClick={handleAiAnalyze}
+                    className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-purple-400 hover:text-purple-300 transition bg-purple-500/10 px-2 py-0.5 rounded-lg border border-purple-500/20 disabled:opacity-50"
+                  >
+                    <span>{analyzingAi ? '⏳ Analyzing...' : '✨ AI Analyze & Draft Reply'}</span>
+                  </button>
+                </div>
+                <textarea
+                  required
+                  rows={3}
+                  value={replyMessage}
+                  onChange={(e) => setReplyMessage(e.target.value)}
+                  placeholder="Type your response to the customer..."
+                  className="hexa-input text-xs"
+                />
+              </div>
+
+              <div className="flex items-center justify-between">
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleStatusChange('closed')}
+                    className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1 text-[11px] font-semibold text-rose-300 hover:bg-rose-500/20"
+                  >
+                    Close Ticket
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleStatusChange('in_progress')}
+                    className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1 text-[11px] font-semibold text-amber-300 hover:bg-amber-500/20"
+                  >
+                    Mark In Progress
+                  </button>
+                </div>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTicket(null)}
+                    className="hexa-btn-secondary !py-1.5 text-xs"
+                  >
+                    Done
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={sending}
+                    className="hexa-btn !py-1.5 !px-4 text-xs font-bold"
+                  >
+                    {sending ? 'Sending...' : 'Send Reply'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          </div>
+        )}
+      </Modal>
+    </>
   )
 }
 
 function Refunds() {
   const [rows, setRows] = useState([])
+  const [loading, setLoading] = useState(true)
+  const [modalItem, setModalItem] = useState(null)
+  const [adminNote, setAdminNote] = useState('')
+  const [creditWallet, setCreditWallet] = useState(true)
+  const [targetStatus, setTargetStatus] = useState('completed')
+  const [processing, setProcessing] = useState(false)
   const { notify } = useToast()
-  const load = () => adminGet('/features/refunds').then((response) => setRows(response.data || []))
-  useEffect(() => { load().catch(() => {}) }, [])
 
-  const update = async (refund, status, creditWallet = false) => {
+  const load = () => {
+    setLoading(true)
+    adminGet('/features/refunds')
+      .then((res) => setRows(res.data || []))
+      .catch((err) => notify(apiErrorMessage(err), 'error'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
+  const openReviewModal = (refund, defaultStatus = 'completed') => {
+    setModalItem(refund)
+    setTargetStatus(defaultStatus)
+    setAdminNote(refund.adminNote || '')
+    setCreditWallet(true)
+  }
+
+  const submitRefundAction = async (e) => {
+    e.preventDefault()
+    if (!modalItem) return
+    setProcessing(true)
     try {
-      await adminPatch(`/features/refunds/${refund._id}`, { status, adminNote: 'Processed from HEXA admin', creditWallet })
-      notify(`Refund ${status}`)
+      await adminPatch(`/features/refunds/${modalItem._id}`, {
+        status: targetStatus,
+        adminNote: adminNote.trim() || 'Processed by store administrator',
+        creditWallet: targetStatus === 'completed' && creditWallet,
+      })
+      notify(`Refund marked as ${targetStatus}`)
+      setModalItem(null)
       load()
-    } catch (error) {
-      notify(apiErrorMessage(error), 'error')
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
+    } finally {
+      setProcessing(false)
     }
   }
 
   return (
-    <ListCard title="Refund requests">
-      {rows.length ? rows.map((refund) => (
-        <Row
-          key={refund._id}
-          title={`${refund.order?.orderNumber || 'Order'} · ৳${Number(refund.requestedAmount || 0).toLocaleString()}`}
-          sub={`${refund.user?.name || ''} · ${refund.reason}`}
-          status={refund.status}
-          actions={!['completed', 'rejected'].includes(refund.status) ? (
-            <div className="flex gap-2">
-              <button onClick={() => update(refund, 'reviewing')} className="text-xs font-semibold text-amber-500">Review</button>
-              <button onClick={() => update(refund, 'rejected')} className="text-xs font-semibold text-rose-500">Reject</button>
-              <button onClick={() => update(refund, 'completed', true)} className="text-xs font-semibold text-emerald-600">Complete + wallet</button>
+    <>
+      <ListCard
+        title={`Refund Requests (${rows.length})`}
+        action={
+          <button onClick={load} className="hexa-btn-secondary !py-1 text-xs flex items-center gap-1">
+            <HugeiconsIcon icon={RefreshIcon} size={14} /> Refresh
+          </button>
+        }
+      >
+        {loading ? (
+          <EmptyAdminRow text="Loading refund requests..." />
+        ) : rows.length ? (
+          rows.map((refund) => (
+            <div key={refund._id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 hover:bg-[var(--hexa-surface)]/50 transition">
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="font-bold text-sm text-[var(--hexa-text)]">
+                    {refund.order?.orderNumber ? `#${refund.order.orderNumber}` : 'Order'}
+                  </span>
+                  <span className="font-black text-sm text-purple-400">
+                    ৳{Number(refund.requestedAmount || 0).toLocaleString()}
+                  </span>
+                  <StatusBadge value={refund.status} />
+                </div>
+                <div className="mt-1 text-xs text-[var(--hexa-muted)] space-y-0.5">
+                  <p>Customer: <strong className="text-[var(--hexa-text)]">{refund.user?.name || 'Customer'}</strong> ({refund.user?.email || '—'})</p>
+                  <p>Reason: <span className="text-gray-300">{refund.reason || 'No reason specified'}</span></p>
+                  {refund.adminNote && (
+                    <p className="text-amber-400 font-mono text-[11px]">Admin Note: {refund.adminNote}</p>
+                  )}
+                  <p className="text-[11px] text-gray-400">Requested on: {new Date(refund.createdAt).toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {!['completed', 'rejected'].includes(refund.status) ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => openReviewModal(refund, 'reviewing')}
+                      className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-1.5 text-xs font-semibold text-amber-300 hover:bg-amber-500/20 transition"
+                    >
+                      Review
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openReviewModal(refund, 'rejected')}
+                      className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-xs font-semibold text-rose-300 hover:bg-rose-500/20 transition"
+                    >
+                      Reject
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => openReviewModal(refund, 'completed')}
+                      className="hexa-btn !py-1.5 !px-3 text-xs font-bold"
+                    >
+                      Process & Settle
+                    </button>
+                  </>
+                ) : (
+                  <span className="text-xs text-gray-500 font-semibold uppercase">Resolved</span>
+                )}
+              </div>
             </div>
-          ) : null}
-        />
-      )) : <EmptyAdminRow text="No refund requests." />}
-    </ListCard>
+          ))
+        ) : (
+          <EmptyAdminRow text="No refund requests found." />
+        )}
+      </ListCard>
+
+      {/* Refund Review & Action Modal */}
+      <Modal
+        open={Boolean(modalItem)}
+        onClose={() => setModalItem(null)}
+        title="Process Refund Request"
+        maxWidth="max-w-md"
+      >
+        {modalItem && (
+          <form onSubmit={submitRefundAction} className="space-y-4 text-xs">
+            <div className="rounded-xl border border-purple-500/20 bg-purple-500/[0.04] p-3 space-y-1">
+              <p className="text-[var(--hexa-muted)]">Order: <strong className="text-gray-100">#{modalItem.order?.orderNumber}</strong></p>
+              <p className="text-[var(--hexa-muted)]">Customer: <strong className="text-gray-100">{modalItem.user?.name}</strong> ({modalItem.user?.email})</p>
+              <p className="text-[var(--hexa-muted)]">Requested Amount: <strong className="text-purple-400 font-bold text-sm">৳{modalItem.requestedAmount}</strong></p>
+              <p className="text-[var(--hexa-muted)]">Reason: <span className="text-gray-200">{modalItem.reason}</span></p>
+            </div>
+
+            <div>
+              <label className="block font-semibold text-[var(--hexa-text)] mb-1">Set Status</label>
+              <select
+                value={targetStatus}
+                onChange={(e) => setTargetStatus(e.target.value)}
+                className="hexa-input text-xs"
+              >
+                <option value="completed">Approve & Complete</option>
+                <option value="reviewing">Under Review / Investigating</option>
+                <option value="rejected">Reject Request</option>
+              </select>
+            </div>
+
+            {targetStatus === 'completed' && (
+              <label className="flex items-center gap-2 rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-surface)] p-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={creditWallet}
+                  onChange={(e) => setCreditWallet(e.target.checked)}
+                />
+                <div>
+                  <p className="font-bold text-gray-200">Credit User Wallet Balance</p>
+                  <p className="text-[11px] text-[var(--hexa-muted)]">Instantly adds ৳{modalItem.requestedAmount} to the customer's store wallet.</p>
+                </div>
+              </label>
+            )}
+
+            <div>
+              <label className="block font-semibold text-[var(--hexa-text)] mb-1">
+                Admin Note / Explanation (Visible to customer)
+              </label>
+              <textarea
+                rows={2}
+                value={adminNote}
+                onChange={(e) => setAdminNote(e.target.value)}
+                placeholder="e.g. Approved and refunded to wallet, or invalid claim reason"
+                className="hexa-input text-xs"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-[var(--hexa-border)]">
+              <button
+                type="button"
+                onClick={() => setModalItem(null)}
+                className="hexa-btn-secondary"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={processing}
+                className="hexa-btn"
+              >
+                {processing ? 'Processing...' : `Save ${targetStatus}`}
+              </button>
+            </div>
+          </form>
+        )}
+      </Modal>
+    </>
   )
 }
 
@@ -747,6 +1448,7 @@ function Reviews() {
 
 function Notifications() {
   const [rows, setRows] = useState([])
+  const [modalOpen, setModalOpen] = useState(false)
   const [form, setForm] = useState({ audience: 'all', type: 'info', title: '', message: '', link: '/' })
   const { notify } = useToast()
   const load = () => adminGet('/features/notifications').then((response) => setRows(response.data || []))
@@ -757,7 +1459,8 @@ function Notifications() {
     try {
       await adminPost('/features/notifications', form)
       notify('In-app notification published')
-      setForm({ ...form, title: '', message: '' })
+      setForm({ audience: 'all', type: 'info', title: '', message: '', link: '/' })
+      setModalOpen(false)
       load()
     } catch (error) {
       notify(apiErrorMessage(error), 'error')
@@ -765,84 +1468,586 @@ function Notifications() {
   }
 
   return (
-    <Two>
-      <FormCard title="Publish in-app notification">
-        <form onSubmit={save} className="space-y-3">
-          <Select label="Audience" value={form.audience} set={(audience) => setForm({ ...form, audience })} options={['all', 'user', 'admin']} />
-          <Input label="Title" value={form.title} set={(title) => setForm({ ...form, title })} required />
-          <TextArea label="Message" value={form.message} set={(message) => setForm({ ...form, message })} rows={3} required />
-          <Input label="Link" value={form.link} set={(link) => setForm({ ...form, link })} />
-          <button className="hexa-btn w-full">Publish notification</button>
-        </form>
-      </FormCard>
-      <ListCard title="Recent notifications">
-        {rows.slice(0, 30).map((notification) => <Row key={notification._id} title={notification.title} sub={`${notification.audience} · ${notification.message}`} status={notification.type} />)}
+    <>
+      <ListCard
+        title="Recent notifications"
+        action={
+          <button
+            onClick={() => setModalOpen(true)}
+            className="hexa-btn text-xs !py-2 !px-3"
+          >
+            <HugeiconsIcon icon={PlusSignIcon} size={15} /> Publish Notification
+          </button>
+        }
+      >
+        {rows.length ? (
+          rows.slice(0, 30).map((notification) => (
+            <Row
+              key={notification._id}
+              title={notification.title}
+              sub={`${notification.audience} · ${notification.message}`}
+              status={notification.type}
+            />
+          ))
+        ) : (
+          <EmptyAdminRow text="No notifications published yet." />
+        )}
       </ListCard>
-    </Two>
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Publish In-App Notification"
+        maxWidth="max-w-md"
+      >
+        <form onSubmit={save} className="space-y-4">
+          <Select label="Audience" value={form.audience} set={(audience) => setForm({ ...form, audience })} options={['all', 'user', 'admin']} />
+          <Input label="Title" value={form.title} set={(title) => setForm({ ...form, title })} placeholder="e.g. Weekend Flash Sale" required />
+          <TextArea label="Message" value={form.message} set={(message) => setForm({ ...form, message })} rows={3} placeholder="Notification description or message..." required />
+          <Input label="Target Link / Path" value={form.link} set={(link) => setForm({ ...form, link })} placeholder="/offers or /products/..." />
+          <div className="flex justify-end gap-2 pt-2 border-t border-[var(--hexa-border)]">
+            <button type="button" onClick={() => setModalOpen(false)} className="hexa-btn-secondary text-xs">
+              Cancel
+            </button>
+            <button type="submit" className="hexa-btn text-xs !py-2 !px-4">
+              <HugeiconsIcon icon={FloppyDiskIcon} size={15} /> Publish Notification
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </>
+  )
+}
+
+function RestockAlerts() {
+  const [rows, setRows] = useState([])
+  const [totalAlerts, setTotalAlerts] = useState(0)
+  const [loading, setLoading] = useState(true)
+  const [dispatchingId, setDispatchingId] = useState(null)
+  const [selectedItem, setSelectedItem] = useState(null)
+  const { notify } = useToast()
+
+  const load = () => {
+    setLoading(true)
+    adminGet('/features/restock-alerts')
+      .then((res) => {
+        setRows(res.data || [])
+        setTotalAlerts(res.totalPendingAlerts || 0)
+      })
+      .catch((err) => notify(apiErrorMessage(err), 'error'))
+      .finally(() => setLoading(false))
+  }
+
+  useEffect(() => { load() }, [])
+
+  const handleNotify = async (item) => {
+    if (!window.confirm(`Broadcast back-in-stock alert to ${item.totalRequests} customer(s) for ${item.productName}?`)) return
+    setDispatchingId(`${item.productId}:${item.variantId || 'base'}`)
+    try {
+      await adminPost(`/features/restock-alerts/${item.productId}/trigger`, { variantId: item.variantId })
+      notify('Restock alerts dispatched successfully!', 'success')
+      load()
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
+    } finally {
+      setDispatchingId(null)
+    }
+  }
+
+  return (
+    <>
+      <ListCard
+        title={`Customer Restock Waitlist (${rows.length} products, ${totalAlerts} requests)`}
+        action={
+          <button onClick={load} className="hexa-btn-secondary !py-1 text-xs flex items-center gap-1">
+            <HugeiconsIcon icon={RefreshIcon} size={14} /> Refresh
+          </button>
+        }
+      >
+        {loading ? (
+          <EmptyAdminRow text="Loading customer restock requests..." />
+        ) : rows.length ? (
+          rows.map((item) => (
+            <div key={`${item.productId}:${item.variantId || 'base'}`} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 hover:bg-[var(--hexa-surface)]/50 transition">
+              <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                <div className="h-12 w-12 rounded-xl bg-purple-500/10 flex items-center justify-center text-purple-400 font-bold overflow-hidden shrink-0 border border-purple-500/20">
+                  {item.productThumbnail?.url ? (
+                    <img src={item.productThumbnail.url} alt="" className="h-full w-full object-cover" />
+                  ) : (
+                    <HugeiconsIcon icon={BellIcon} size={20} />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold text-sm text-[var(--hexa-text)]">{item.productName}</span>
+                    {item.variantName && (
+                      <span className="rounded-md bg-purple-500/15 px-2 py-0.5 text-xs font-semibold text-purple-300">
+                        {item.variantName}
+                      </span>
+                    )}
+                    <span className="rounded-md bg-amber-500/15 px-2.5 py-0.5 text-xs font-black text-amber-400">
+                      {item.totalRequests} Waiting Request{item.totalRequests > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap gap-3 text-xs text-[var(--hexa-muted)]">
+                    <span>Current Stock: <strong className={item.productStock > 0 ? 'text-emerald-400' : 'text-rose-400'}>{item.productStock} units</strong></span>
+                    <span>Last Requested: {new Date(item.lastRequestedAt).toLocaleDateString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setSelectedItem(item)}
+                  className="hexa-btn-secondary !py-1.5 !px-3 text-xs font-semibold"
+                >
+                  View Emails ({item.requests.length})
+                </button>
+                <button
+                  type="button"
+                  disabled={dispatchingId === `${item.productId}:${item.variantId || 'base'}`}
+                  onClick={() => handleNotify(item)}
+                  className="hexa-btn !py-1.5 !px-3 text-xs font-bold"
+                >
+                  {dispatchingId === `${item.productId}:${item.variantId || 'base'}` ? 'Dispatching...' : 'Notify Customers'}
+                </button>
+              </div>
+            </div>
+          ))
+        ) : (
+          <EmptyAdminRow text="No pending restock requests. All customers have been notified or stock is healthy!" />
+        )}
+      </ListCard>
+
+      {/* Modal to view waiting emails */}
+      <Modal
+        open={Boolean(selectedItem)}
+        onClose={() => setSelectedItem(null)}
+        title={selectedItem ? `Waiting Customers for ${selectedItem.productName}` : 'Subscribers'}
+        maxWidth="max-w-md"
+      >
+        {selectedItem && (
+          <div className="space-y-3 text-xs">
+            <p className="text-[var(--hexa-muted)]">
+              Showing <strong className="text-gray-100">{selectedItem.requests.length}</strong> customer(s) who signed up for restock alerts:
+            </p>
+            <div className="max-h-60 overflow-y-auto space-y-1 rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-card)] p-2">
+              {selectedItem.requests.map((r, i) => (
+                <div key={i} className="flex items-center justify-between p-2 rounded-lg hover:bg-white/[0.03]">
+                  <span className="font-mono text-gray-200">{r.email}</span>
+                  <span className="text-[10px] text-gray-400">{new Date(r.createdAt).toLocaleDateString()}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex justify-end pt-2">
+              <button onClick={() => setSelectedItem(null)} className="hexa-btn-secondary">
+                Close
+              </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+    </>
   )
 }
 
 function Abandoned() {
   const [rows, setRows] = useState([])
+  const [sendingId, setSendingId] = useState(null)
+  const { notify } = useToast()
+
   const load = () => adminGet('/features/abandoned-carts').then((response) => setRows(response.data || []))
   useEffect(() => { load().catch(() => {}) }, [])
 
+  const sendReminder = async (cart) => {
+    setSendingId(cart._id)
+    try {
+      await adminPost(`/features/abandoned-carts/${cart._id}/recover`)
+      notify(`Cart recovery notification sent to ${cart.user?.name || cart.user?.email}`, 'success')
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
+    } finally {
+      setSendingId(null)
+    }
+  }
+
   return (
-    <ListCard title="Abandoned carts (24h+ inactivity)" action={<button onClick={load} className="hexa-btn-secondary !py-2">Refresh</button>}>
+    <ListCard title={`Abandoned Carts 24h+ Inactivity (${rows.length})`} action={<button onClick={load} className="hexa-btn-secondary !py-2">Refresh</button>}>
       {rows.length ? rows.map((cart) => {
         const bundles = (cart.items || []).filter((item) => item.itemType === 'bundle').length
         const products = (cart.items || []).length - bundles
-        return <Row key={cart._id} title={cart.user?.name || 'Customer'} sub={`${cart.user?.email || ''} · ${products} product line(s), ${bundles} bundle line(s) · last active ${new Date(cart.lastActivityAt).toLocaleString()}`} status="abandoned" />
+        return (
+          <div key={cart._id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 hover:bg-[var(--hexa-surface)]/50 transition">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-bold text-sm text-[var(--hexa-text)]">{cart.user?.name || 'Customer'}</span>
+                <span className="text-xs text-[var(--hexa-muted)]">({cart.user?.email || 'No email'})</span>
+                <StatusBadge value="abandoned" />
+              </div>
+              <div className="mt-1 text-xs text-[var(--hexa-muted)] space-y-0.5">
+                <p>Items in Cart: <strong className="text-gray-200">{products} product line(s), {bundles} bundle line(s)</strong></p>
+                <div className="flex flex-wrap gap-1.5 mt-1">
+                  {(cart.items || []).slice(0, 3).map((item, idx) => (
+                    <span key={idx} className="rounded bg-white/[0.05] border border-white/5 px-2 py-0.5 text-[11px] text-gray-300">
+                      {item.product?.name || item.bundle?.name || 'Item'} × {item.quantity}
+                    </span>
+                  ))}
+                  {(cart.items || []).length > 3 && (
+                    <span className="text-[11px] text-gray-400">+{cart.items.length - 3} more</span>
+                  )}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-1">Last active: {new Date(cart.lastActivityAt).toLocaleString()}</p>
+              </div>
+            </div>
+
+            <div className="shrink-0">
+              <button
+                type="button"
+                disabled={sendingId === cart._id}
+                onClick={() => sendReminder(cart)}
+                className="hexa-btn !py-1.5 !px-3 text-xs font-bold"
+              >
+                {sendingId === cart._id ? 'Sending...' : 'Send Recovery Reminder'}
+              </button>
+            </div>
+          </div>
+        )
       }) : <EmptyAdminRow text="No abandoned carts currently detected." />}
     </ListCard>
   )
 }
 
+const ROLE_PERMISSIONS = [
+  { id: 'catalog.manage', label: 'Catalog & Products', category: 'Catalog' },
+  { id: 'inventory.manage', label: 'Inventory & Keys', category: 'Inventory' },
+  { id: 'orders.manage', label: 'Orders & Deliveries', category: 'Orders' },
+  { id: 'users.manage', label: 'Users & Wallet', category: 'Users' },
+  { id: 'roles.manage', label: 'Roles & Staff', category: 'Staff' },
+  { id: 'reports.view', label: 'Reports & Analytics', category: 'Analytics' },
+  { id: 'growth.manage', label: 'Marketing & Growth', category: 'Marketing' },
+  { id: 'support.manage', label: 'Support Helpdesk', category: 'Support' },
+  { id: 'reviews.manage', label: 'Reviews Moderation', category: 'Moderation' },
+  { id: 'refunds.manage', label: 'Refund Requests', category: 'Finance' },
+  { id: 'settings.manage', label: 'Store Settings', category: 'Settings' },
+  { id: 'audit.view', label: 'Audit Trail Logs', category: 'Security' },
+  { id: 'backup.manage', label: 'Backup & Restore', category: 'System' },
+]
+
 function Roles() {
   const [rows, setRows] = useState([])
-  const [form, setForm] = useState({ name: '', description: '', permissions: 'products.read,orders.read' })
+  const [editingId, setEditingId] = useState(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [form, setForm] = useState({
+    name: '',
+    description: '',
+    permissions: ['products.read', 'orders.read'],
+    active: true,
+  })
+  const [saving, setSaving] = useState(false)
   const { notify } = useToast()
-  const load = () => adminGet('/features/roles').then((response) => setRows(response.data || []))
-  useEffect(() => { load().catch(() => {}) }, [])
+
+  const load = () =>
+    adminGet('/features/roles')
+      .then((res) => setRows(res.data || []))
+      .catch((err) => notify(apiErrorMessage(err, 'Failed to load roles'), 'error'))
+
+  useEffect(() => {
+    load()
+  }, [])
+
+  const togglePermission = (permId) => {
+    setForm((prev) => {
+      const exists = prev.permissions.includes(permId)
+      return {
+        ...prev,
+        permissions: exists
+          ? prev.permissions.filter((p) => p !== permId)
+          : [...prev.permissions, permId],
+      }
+    })
+  }
+
+  const selectAll = () => {
+    setForm((prev) => ({
+      ...prev,
+      permissions: ROLE_PERMISSIONS.map((p) => p.id),
+    }))
+  }
+
+  const clearAll = () => {
+    setForm((prev) => ({ ...prev, permissions: [] }))
+  }
+
+  const startEdit = (role) => {
+    setEditingId(role._id)
+    setForm({
+      name: role.name || '',
+      description: role.description || '',
+      permissions: Array.isArray(role.permissions) ? [...role.permissions] : [],
+      active: role.active !== false,
+    })
+    setModalOpen(true)
+  }
+
+  const resetForm = () => {
+    setEditingId(null)
+    setForm({
+      name: '',
+      description: '',
+      permissions: ['orders.manage', 'catalog.manage'],
+      active: true,
+    })
+  }
+
+  const openCreateModal = () => {
+    resetForm()
+    setModalOpen(true)
+  }
 
   const save = async (event) => {
     event.preventDefault()
+    if (!form.name.trim()) {
+      notify('Role name is required', 'error')
+      return
+    }
+
     try {
-      await adminPost('/features/roles', {
-        name: form.name,
-        slug: '',
-        description: form.description,
-        permissions: form.permissions.split(',').map((value) => value.trim()).filter(Boolean),
-        active: true,
+      setSaving(true)
+      const payload = {
+        name: form.name.trim(),
+        slug: form.name.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-'),
+        description: form.description.trim(),
+        permissions: form.permissions,
+        active: Boolean(form.active),
         system: false,
-      })
-      notify('Role created')
-      setForm({ ...form, name: '' })
-      load()
+      }
+
+      if (editingId) {
+        await adminPut(`/features/roles/${editingId}`, payload)
+        notify('Custom staff role updated successfully', 'success')
+      } else {
+        await adminPost('/features/roles', payload)
+        notify('Custom staff role created successfully', 'success')
+      }
+
+      resetForm()
+      setModalOpen(false)
+      await load()
     } catch (error) {
       notify(apiErrorMessage(error), 'error')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const removeRole = async (role) => {
+    if (role.system) {
+      notify('System default roles cannot be deleted', 'error')
+      return
+    }
+    if (!window.confirm(`Are you sure you want to delete the role "${role.name}"?`)) return
+
+    try {
+      await adminDelete(`/features/roles/${role._id}`)
+      notify(`Role "${role.name}" deleted`)
+      if (editingId === role._id) {
+        resetForm()
+        setModalOpen(false)
+      }
+      await load()
+    } catch (err) {
+      notify(apiErrorMessage(err), 'error')
     }
   }
 
   return (
-    <Two>
-      <FormCard title="Create custom role">
-        <form onSubmit={save} className="space-y-3">
-          <Input label="Role name" value={form.name} set={(name) => setForm({ ...form, name })} required />
-          <Input label="Description" value={form.description} set={(description) => setForm({ ...form, description })} />
-          <TextArea label="Permissions (comma separated)" value={form.permissions} set={(permissions) => setForm({ ...form, permissions })} rows={4} />
-          <button className="hexa-btn w-full">Create role</button>
-        </form>
-      </FormCard>
-      <ListCard title="Roles">
-        {rows.map((role) => <Row key={role._id} title={role.name} sub={(role.permissions || []).join(', ') || 'No permissions'} status={role.active ? 'active' : 'inactive'} />)}
+    <>
+      <ListCard
+        title={`Custom Role Profiles (${rows.length})`}
+        action={
+          <button
+            type="button"
+            onClick={openCreateModal}
+            className="hexa-btn text-xs !py-2 !px-3 flex items-center gap-1.5"
+          >
+            <HugeiconsIcon icon={PlusSignIcon} size={15} /> Add Staff Role
+          </button>
+        }
+      >
+        {rows.length > 0 ? (
+          rows.map((role) => (
+            <div
+              key={role._id}
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 hover:bg-white/[0.01] transition border-b border-white/5 last:border-0"
+            >
+              <div className="space-y-1.5 min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-sm text-[var(--hexa-text)]">{role.name}</h3>
+                  <StatusBadge value={role.active ? 'active' : 'inactive'} />
+                  {role.system && (
+                    <span className="rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 px-1.5 py-0.2 text-[10px] font-bold">
+                      System
+                    </span>
+                  )}
+                </div>
+                {role.description && (
+                  <p className="text-xs text-[var(--hexa-muted)] line-clamp-1">{role.description}</p>
+                )}
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {(role.permissions || []).map((perm) => (
+                    <span
+                      key={perm}
+                      className="px-1.5 py-0.5 rounded text-[10px] bg-purple-500/15 text-purple-300 font-mono"
+                    >
+                      {perm}
+                    </span>
+                  ))}
+                  {(!role.permissions || role.permissions.length === 0) && (
+                    <span className="text-[11px] text-gray-500 italic">No permissions granted</span>
+                  )}
+                </div>
+              </div>
+
+              <div className="shrink-0 flex items-center gap-1">
+                <button
+                  type="button"
+                  onClick={() => startEdit(role)}
+                  className="rounded-lg p-2 text-purple-400 hover:bg-purple-500/10 transition"
+                  title="Edit Role"
+                >
+                  <HugeiconsIcon icon={Edit02Icon} size={15} />
+                </button>
+                {!role.system && (
+                  <button
+                    type="button"
+                    onClick={() => removeRole(role)}
+                    className="rounded-lg p-2 text-rose-400 hover:bg-rose-500/10 transition"
+                    title="Delete Role"
+                  >
+                    <HugeiconsIcon icon={Delete02Icon} size={15} />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))
+        ) : (
+          <EmptyAdminRow text="No custom role profiles defined yet. Click '+ Add Staff Role' to create one." />
+        )}
       </ListCard>
-    </Two>
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title={editingId ? 'Edit Staff Role Profile' : 'Create Custom Staff Role'}
+        maxWidth="max-w-2xl"
+      >
+        <form onSubmit={save} className="space-y-4">
+          <Input
+            label="Role Profile Name"
+            value={form.name}
+            set={(name) => setForm({ ...form, name })}
+            placeholder="e.g. Catalog Manager, Support Lead, Billing Clerk"
+            required
+          />
+
+          <TextArea
+            label="Description"
+            value={form.description}
+            set={(description) => setForm({ ...form, description })}
+            rows={2}
+            placeholder="Brief explanation of duties and access level..."
+          />
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-[var(--hexa-muted)]">
+                Assigned Permissions ({form.permissions.length}/{ROLE_PERMISSIONS.length})
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={selectAll}
+                  className="text-[11px] font-semibold text-purple-400 hover:underline"
+                >
+                  Select All
+                </button>
+                <span className="text-gray-500 text-[11px]">·</span>
+                <button
+                  type="button"
+                  onClick={clearAll}
+                  className="text-[11px] font-semibold text-gray-400 hover:underline"
+                >
+                  Clear All
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-64 overflow-y-auto p-2 rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-card)]">
+              {ROLE_PERMISSIONS.map((perm) => {
+                const checked = form.permissions.includes(perm.id)
+                return (
+                  <label
+                    key={perm.id}
+                    className={`flex items-start gap-2.5 rounded-lg p-2 text-xs cursor-pointer transition border ${
+                      checked
+                        ? 'border-purple-500/40 bg-purple-500/10 text-white'
+                        : 'border-white/5 bg-white/[0.01] text-gray-400 hover:bg-white/[0.04]'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => togglePermission(perm.id)}
+                      className="mt-0.5 rounded border-gray-600 text-purple-600 focus:ring-0"
+                    />
+                    <div className="min-w-0">
+                      <p className="font-semibold leading-tight">{perm.label}</p>
+                      <p className="text-[10px] text-[var(--hexa-muted)] mt-0.5 font-mono">{perm.id}</p>
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+          </div>
+
+          <Checkbox
+            label="Role is Active & Assignable"
+            checked={form.active}
+            set={(active) => setForm({ ...form, active })}
+          />
+
+          <div className="flex justify-end gap-2 pt-2 border-t border-[var(--hexa-border)]">
+            <button
+              type="button"
+              onClick={() => setModalOpen(false)}
+              className="hexa-btn-secondary text-xs"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="hexa-btn text-xs !py-2 !px-4"
+            >
+              <HugeiconsIcon icon={FloppyDiskIcon} size={15} /> {saving ? 'Saving...' : editingId ? 'Save Changes' : 'Create Role'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </>
   )
 }
 
 function Settings() {
   const [data, setData] = useState(null)
+  const [faqModalOpen, setFaqModalOpen] = useState(false)
+  const [webhookModalOpen, setWebhookModalOpen] = useState(false)
+  const [faqQ, setFaqQ] = useState('')
+  const [faqA, setFaqA] = useState('')
+  const [webhookName, setWebhookName] = useState('')
+  const [webhookUrl, setWebhookUrl] = useState('')
+  const [webhookEvents, setWebhookEvents] = useState('order.created,order.paid')
   const { notify } = useToast()
 
   useEffect(() => {
@@ -852,11 +2057,11 @@ function Settings() {
   if (!data) return <div className="hexa-card h-64 animate-pulse" />
 
   const save = async (event) => {
-    event.preventDefault()
+    if (event) event.preventDefault()
     try {
       const response = await adminPut('/features/settings', data)
       setData(response.data)
-      notify('Site settings saved')
+      notify('Site settings saved successfully', 'success')
     } catch (error) {
       notify(apiErrorMessage(error), 'error')
     }
@@ -867,63 +2072,293 @@ function Settings() {
     homepage: { ...data.homepage, [key]: data.homepage?.[key] === false },
   })
 
+  const addFaq = (e) => {
+    if (e) e.preventDefault()
+    if (!faqQ.trim() || !faqA.trim()) return
+    const updated = [...(data.faq || []), { question: faqQ.trim(), answer: faqA.trim() }]
+    setData({ ...data, faq: updated })
+    setFaqQ('')
+    setFaqA('')
+    setFaqModalOpen(false)
+    notify('FAQ item added to staged settings. Click Save to persist.', 'info')
+  }
+
+  const removeFaq = (index) => {
+    const updated = (data.faq || []).filter((_, i) => i !== index)
+    setData({ ...data, faq: updated })
+  }
+
+  const addWebhook = (e) => {
+    if (e) e.preventDefault()
+    if (!webhookName.trim() || !webhookUrl.trim()) return
+    const events = webhookEvents.split(',').map((e) => e.trim()).filter(Boolean)
+    const updated = [...(data.webhooks || []), {
+      name: webhookName.trim(),
+      url: webhookUrl.trim(),
+      events,
+      active: true,
+    }]
+    setData({ ...data, webhooks: updated })
+    setWebhookName('')
+    setWebhookUrl('')
+    setWebhookModalOpen(false)
+    notify('Webhook added to staged settings. Click Save to persist.', 'info')
+  }
+
+  const removeWebhook = (index) => {
+    const updated = (data.webhooks || []).filter((_, i) => i !== index)
+    setData({ ...data, webhooks: updated })
+  }
+
   return (
-    <form onSubmit={save} className="grid gap-6 xl:grid-cols-2">
-      <FormCard title="Homepage & SEO">
-        <div className="space-y-3">
-          <Input label="Store name" value={data.storeName || ''} set={(storeName) => setData({ ...data, storeName })} />
-          <Input label="Tagline" value={data.tagline || ''} set={(tagline) => setData({ ...data, tagline })} />
-          <Input label="SEO title" value={data.seo?.title || ''} set={(title) => setData({ ...data, seo: { ...data.seo, title } })} />
-          <TextArea label="SEO description" value={data.seo?.description || ''} set={(description) => setData({ ...data, seo: { ...data.seo, description } })} rows={3} />
-          <Input label="Homepage announcement" value={data.homepage?.announcement || ''} set={(announcement) => setData({ ...data, homepage: { ...data.homepage, announcement } })} />
-          <div className="pt-2">
-            <p className="hexa-label">Homepage sections</p>
-            <div className="grid gap-2 sm:grid-cols-2">
-              {[
-                ['showCategories', 'Categories'],
-                ['showFeatured', 'Featured products'],
-                ['showBundles', 'Bundles'],
-                ['showPromotions', 'Promotions'],
-                ['showPopular', 'Popular products'],
-                ['showWhyHexa', 'Why HEXA / support'],
-              ].map(([key, label]) => (
-                <label key={key} className="flex items-center gap-2 rounded-xl border border-[var(--hexa-border)] p-3 text-sm">
-                  <input type="checkbox" checked={data.homepage?.[key] !== false} onChange={() => toggle(key)} />{label}
-                </label>
-              ))}
+    <>
+      <form onSubmit={save} className="grid gap-6 xl:grid-cols-2">
+        {/* Maintenance Mode & Emergency Controls */}
+        <FormCard title="Store Status & Maintenance Mode">
+          <div className="space-y-3">
+            <label className="flex items-center gap-3 rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-surface)] p-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={Boolean(data.maintenanceMode)}
+                onChange={(e) => setData({ ...data, maintenanceMode: e.target.checked })}
+                className="h-4 w-4 rounded text-purple-600 focus:ring-purple-500"
+              />
+              <div>
+                <p className="font-bold text-gray-200">Emergency Maintenance Mode</p>
+                <p className="text-[11px] text-[var(--hexa-muted)]">When enabled, store checkout and catalog will display the maintenance screen to non-admin visitors.</p>
+              </div>
+            </label>
+            <TextArea
+              label="Maintenance Notice Message"
+              value={data.maintenanceMessage || ''}
+              set={(maintenanceMessage) => setData({ ...data, maintenanceMessage })}
+              rows={2}
+            />
+          </div>
+        </FormCard>
+
+        {/* Homepage & SEO */}
+        <FormCard title="Homepage & SEO">
+          <div className="space-y-3">
+            <Input label="Store name" value={data.storeName || ''} set={(storeName) => setData({ ...data, storeName })} />
+            <Input label="Tagline" value={data.tagline || ''} set={(tagline) => setData({ ...data, tagline })} />
+            <Input label="SEO title" value={data.seo?.title || ''} set={(title) => setData({ ...data, seo: { ...data.seo, title } })} />
+            <TextArea label="SEO description" value={data.seo?.description || ''} set={(description) => setData({ ...data, seo: { ...data.seo, description } })} rows={3} />
+            <Input label="Homepage announcement" value={data.homepage?.announcement || ''} set={(announcement) => setData({ ...data, homepage: { ...data.homepage, announcement } })} />
+            <div className="pt-2">
+              <p className="hexa-label">Homepage sections</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {[
+                  ['showCategories', 'Categories'],
+                  ['showFeatured', 'Featured products'],
+                  ['showBundles', 'Bundles'],
+                  ['showPromotions', 'Promotions'],
+                  ['showPopular', 'Popular products'],
+                  ['showWhyHexa', 'Why HEXA / support'],
+                ].map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-2 rounded-xl border border-[var(--hexa-border)] p-3 text-sm">
+                    <input type="checkbox" checked={data.homepage?.[key] !== false} onChange={() => toggle(key)} />{label}
+                  </label>
+                ))}
+              </div>
             </div>
           </div>
-        </div>
-      </FormCard>
+        </FormCard>
 
-      <FormCard title="Rewards & loyalty">
-        <div className="space-y-3">
-          <Checkbox label="Enable loyalty & referral rewards" checked={data.loyalty?.enabled !== false} set={(enabled) => setData({ ...data, loyalty: { ...data.loyalty, enabled } })} />
-          <Input type="number" label="Points per ৳100" value={data.loyalty?.pointsPer100BDT || 0} set={(value) => setData({ ...data, loyalty: { ...data.loyalty, pointsPer100BDT: Number(value) } })} />
-          <Input type="number" label="Point value in BDT" value={data.loyalty?.pointValueBDT || 0} set={(value) => setData({ ...data, loyalty: { ...data.loyalty, pointValueBDT: Number(value) } })} />
-          <Input type="number" label="Referral reward BDT" value={data.loyalty?.referralRewardBDT || 0} set={(value) => setData({ ...data, loyalty: { ...data.loyalty, referralRewardBDT: Number(value) } })} />
-          <p className="hexa-label">Currency rates from BDT</p>
-          {(data.currencies || []).map((currency, index) => (
-            <div key={currency.code} className="grid grid-cols-[80px_1fr] gap-2">
-              <input disabled className="hexa-input" value={currency.code} />
-              <input
-                type="number"
-                step="0.000001"
-                className="hexa-input"
-                value={currency.rateFromBDT}
-                onChange={(event) => {
-                  const currencies = [...data.currencies]
-                  currencies[index] = { ...currency, rateFromBDT: Number(event.target.value) }
-                  setData({ ...data, currencies })
-                }}
-              />
-            </div>
-          ))}
-        </div>
-      </FormCard>
+        {/* Rewards & loyalty */}
+        <FormCard title="Rewards & loyalty">
+          <div className="space-y-3">
+            <Checkbox label="Enable loyalty & referral rewards" checked={data.loyalty?.enabled !== false} set={(enabled) => setData({ ...data, loyalty: { ...data.loyalty, enabled } })} />
+            <Input type="number" label="Points per ৳100" value={data.loyalty?.pointsPer100BDT || 0} set={(value) => setData({ ...data, loyalty: { ...data.loyalty, pointsPer100BDT: Number(value) } })} />
+            <Input type="number" label="Point value in BDT" value={data.loyalty?.pointValueBDT || 0} set={(value) => setData({ ...data, loyalty: { ...data.loyalty, pointValueBDT: Number(value) } })} />
+            <Input type="number" label="Referral reward BDT" value={data.loyalty?.referralRewardBDT || 0} set={(value) => setData({ ...data, loyalty: { ...data.loyalty, referralRewardBDT: Number(value) } })} />
+            <p className="hexa-label">Currency rates from BDT</p>
+            {(data.currencies || []).map((currency, index) => (
+              <div key={currency.code} className="grid grid-cols-[80px_1fr] gap-2">
+                <input disabled className="hexa-input" value={currency.code} />
+                <input
+                  type="number"
+                  step="0.000001"
+                  className="hexa-input"
+                  value={currency.rateFromBDT}
+                  onChange={(event) => {
+                    const currencies = [...data.currencies]
+                    currencies[index] = { ...currency, rateFromBDT: Number(event.target.value) }
+                    setData({ ...data, currencies })
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        </FormCard>
 
-      <div className="xl:col-span-2"><button className="hexa-btn"><HugeiconsIcon icon={FloppyDiskIcon} size={15} />Save settings</button></div>
-    </form>
+        {/* Storefront FAQs Manager */}
+        <FormCard
+          title={`Store FAQs (${(data.faq || []).length})`}
+          action={
+            <button
+              type="button"
+              onClick={() => setFaqModalOpen(true)}
+              className="hexa-btn text-xs !py-1 !px-2.5 flex items-center gap-1"
+            >
+              <HugeiconsIcon icon={PlusSignIcon} size={13} /> Add FAQ
+            </button>
+          }
+        >
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {(data.faq || []).length === 0 ? (
+              <p className="text-xs text-[var(--hexa-muted)] py-4 text-center">No FAQs configured yet. Click "+ Add FAQ" above.</p>
+            ) : (
+              data.faq.map((f, i) => (
+                <div key={i} className="flex items-start justify-between gap-2 p-2.5 rounded-lg border border-white/5 bg-white/[0.02] text-xs">
+                  <div className="min-w-0 flex-1">
+                    <p className="font-bold text-gray-200">{f.question}</p>
+                    <p className="text-gray-400 text-[11px] mt-0.5 line-clamp-2">{f.answer}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeFaq(i)}
+                    className="p-1 text-rose-400 hover:bg-rose-500/10 rounded transition"
+                    title="Remove FAQ"
+                  >
+                    <HugeiconsIcon icon={Delete02Icon} size={14} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </FormCard>
+
+        {/* Outgoing Webhooks Manager */}
+        <FormCard
+          title={`Outgoing Webhooks (${(data.webhooks || []).length})`}
+          action={
+            <button
+              type="button"
+              onClick={() => setWebhookModalOpen(true)}
+              className="hexa-btn text-xs !py-1 !px-2.5 flex items-center gap-1"
+            >
+              <HugeiconsIcon icon={PlusSignIcon} size={13} /> Add Webhook
+            </button>
+          }
+        >
+          <div className="space-y-2 max-h-60 overflow-y-auto">
+            {(data.webhooks || []).length === 0 ? (
+              <p className="text-xs text-[var(--hexa-muted)] py-4 text-center">No webhooks registered. Click "+ Add Webhook" above.</p>
+            ) : (
+              data.webhooks.map((w, i) => (
+                <div key={i} className="flex items-start justify-between gap-2 p-2.5 rounded-lg border border-white/5 bg-white/[0.02] text-xs">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-bold text-gray-200">{w.name}</p>
+                      <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${w.active ? 'bg-emerald-500/20 text-emerald-400' : 'bg-gray-500/20 text-gray-400'}`}>
+                        {w.active ? 'Active' : 'Disabled'}
+                      </span>
+                    </div>
+                    <p className="font-mono text-purple-400 text-[10px] truncate mt-0.5">{w.url}</p>
+                    <p className="text-gray-400 text-[10px] mt-0.5">Events: {(w.events || []).join(', ')}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => removeWebhook(i)}
+                    className="p-1 text-rose-400 hover:bg-rose-500/10 rounded transition"
+                    title="Remove Webhook"
+                  >
+                    <HugeiconsIcon icon={Delete02Icon} size={14} />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </FormCard>
+
+        <div className="xl:col-span-2">
+          <button type="submit" className="hexa-btn w-full sm:w-auto">
+            <HugeiconsIcon icon={FloppyDiskIcon} size={15} /> Save All Settings
+          </button>
+        </div>
+      </form>
+
+      <Modal
+        open={faqModalOpen}
+        onClose={() => setFaqModalOpen(false)}
+        title="Add Storefront FAQ"
+        maxWidth="max-w-md"
+      >
+        <form onSubmit={addFaq} className="space-y-4">
+          <Input
+            label="Question"
+            value={faqQ}
+            set={setFaqQ}
+            placeholder="e.g. How fast is delivery?"
+            required
+          />
+          <TextArea
+            label="Answer"
+            value={faqA}
+            set={setFaqA}
+            placeholder="Detailed answer shown to shoppers..."
+            rows={3}
+            required
+          />
+          <div className="flex justify-end gap-2 pt-2 border-t border-[var(--hexa-border)]">
+            <button
+              type="button"
+              onClick={() => setFaqModalOpen(false)}
+              className="hexa-btn-secondary text-xs"
+            >
+              Cancel
+            </button>
+            <button type="submit" className="hexa-btn text-xs !py-2 !px-4">
+              <HugeiconsIcon icon={PlusSignIcon} size={15} /> Add FAQ
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      <Modal
+        open={webhookModalOpen}
+        onClose={() => setWebhookModalOpen(false)}
+        title="Register Outgoing Webhook"
+        maxWidth="max-w-md"
+      >
+        <form onSubmit={addWebhook} className="space-y-4">
+          <Input
+            label="Webhook Name"
+            value={webhookName}
+            set={setWebhookName}
+            placeholder="e.g. Discord Order Alerts"
+            required
+          />
+          <Input
+            label="Endpoint URL"
+            value={webhookUrl}
+            set={setWebhookUrl}
+            placeholder="https://discord.com/api/webhooks/..."
+            required
+          />
+          <Input
+            label="Trigger Events (comma separated)"
+            value={webhookEvents}
+            set={setWebhookEvents}
+            placeholder="order.created, order.paid"
+            required
+          />
+          <div className="flex justify-end gap-2 pt-2 border-t border-[var(--hexa-border)]">
+            <button
+              type="button"
+              onClick={() => setWebhookModalOpen(false)}
+              className="hexa-btn-secondary text-xs"
+            >
+              Cancel
+            </button>
+            <button type="submit" className="hexa-btn text-xs !py-2 !px-4">
+              <HugeiconsIcon icon={PlusSignIcon} size={15} /> Add Webhook
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </>
   )
 }
 
@@ -983,46 +2418,349 @@ function Backup() {
 }
 
 function TargetEditor({
-  title,
-  products,
-  categories,
-  bundles,
-  productIds,
-  categoryIds,
-  bundleIds,
+  title = 'Targeted Items (leave unselected to apply to all products)',
+  products = [],
+  categories = [],
+  bundles = [],
+  productIds = [],
+  categoryIds = [],
+  bundleIds = [],
   setProductIds,
   setCategoryIds,
   setBundleIds,
 }) {
-  return (
-    <div className="rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-bg-soft)] p-4">
-      <p className="text-sm font-semibold">{title}</p>
-      <p className="mt-1 text-xs text-[var(--hexa-muted)]">Campaigns and coupons can target multiple resources. Bundles are targeted as one sellable item, not through their individual components.</p>
-      <div className="mt-3 grid gap-3 lg:grid-cols-3">
-        <CheckList title="Products" rows={products} selected={productIds} onChange={setProductIds} />
-        <CheckList title="Categories" rows={categories} selected={categoryIds} onChange={setCategoryIds} />
-        <CheckList title="Bundles" rows={bundles} selected={bundleIds} onChange={setBundleIds} />
-      </div>
-    </div>
-  )
-}
+  const [activeTab, setActiveTab] = useState('products')
+  const [search, setSearch] = useState('')
 
-function CheckList({ title, rows, selected, onChange }) {
-  const selectedSet = useMemo(() => new Set(selected || []), [selected])
-  const toggle = (id) => {
-    onChange(selectedSet.has(id) ? selected.filter((value) => value !== id) : [...selected, id])
+  const selectedProductSet = useMemo(() => new Set(productIds || []), [productIds])
+  const selectedCategorySet = useMemo(() => new Set(categoryIds || []), [categoryIds])
+  const selectedBundleSet = useMemo(() => new Set(bundleIds || []), [bundleIds])
+
+  const totalSelected = (productIds?.length || 0) + (categoryIds?.length || 0) + (bundleIds?.length || 0)
+
+  const clearAll = () => {
+    setProductIds([])
+    setCategoryIds([])
+    setBundleIds([])
   }
+
+  const activeConfig = useMemo(() => {
+    switch (activeTab) {
+      case 'categories':
+        return {
+          type: 'category',
+          label: 'Categories',
+          items: categories || [],
+          selectedSet: selectedCategorySet,
+          selectedList: categoryIds || [],
+          setter: setCategoryIds,
+        }
+      case 'bundles':
+        return {
+          type: 'bundle',
+          label: 'Bundles',
+          items: bundles || [],
+          selectedSet: selectedBundleSet,
+          selectedList: bundleIds || [],
+          setter: setBundleIds,
+        }
+      case 'products':
+      default:
+        return {
+          type: 'product',
+          label: 'Products',
+          items: products || [],
+          selectedSet: selectedProductSet,
+          selectedList: productIds || [],
+          setter: setProductIds,
+        }
+    }
+  }, [activeTab, products, categories, bundles, selectedProductSet, selectedCategorySet, selectedBundleSet, productIds, categoryIds, bundleIds, setProductIds, setCategoryIds, setBundleIds])
+
+  const filteredItems = useMemo(() => {
+    if (!search.trim()) return activeConfig.items
+    const query = search.trim().toLowerCase()
+    return activeConfig.items.filter((item) =>
+      item.name?.toLowerCase().includes(query) ||
+      item.slug?.toLowerCase().includes(query)
+    )
+  }, [activeConfig.items, search])
+
+  const toggleItem = (id) => {
+    const isSelected = activeConfig.selectedSet.has(id)
+    if (isSelected) {
+      activeConfig.setter(activeConfig.selectedList.filter((val) => val !== id))
+    } else {
+      activeConfig.setter([...activeConfig.selectedList, id])
+    }
+  }
+
+  const selectAllFiltered = () => {
+    const filteredIds = filteredItems.map((item) => item._id)
+    const combined = Array.from(new Set([...activeConfig.selectedList, ...filteredIds]))
+    activeConfig.setter(combined)
+  }
+
+  const deselectAllActive = () => {
+    const filteredIdSet = new Set(filteredItems.map((item) => item._id))
+    activeConfig.setter(activeConfig.selectedList.filter((id) => !filteredIdSet.has(id)))
+  }
+
+  const selectedProducts = useMemo(() => (products || []).filter((p) => selectedProductSet.has(p._id)), [products, selectedProductSet])
+  const selectedCategories = useMemo(() => (categories || []).filter((c) => selectedCategorySet.has(c._id)), [categories, selectedCategorySet])
+  const selectedBundles = useMemo(() => (bundles || []).filter((b) => selectedBundleSet.has(b._id)), [bundles, selectedBundleSet])
+
   return (
-    <div>
-      <p className="mb-2 text-xs font-bold uppercase tracking-wider text-[var(--hexa-muted)]">{title}</p>
-      <div className="max-h-44 space-y-1 overflow-y-auto rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-card)] p-2">
-        {rows.length ? rows.map((row) => (
-          <label key={row._id} className="flex cursor-pointer items-center gap-2 rounded-lg p-2 text-sm hover:bg-purple-500/[0.05]">
-            <input type="checkbox" checked={selectedSet.has(row._id)} onChange={() => toggle(row._id)} />
-            <span className="min-w-0 truncate">{row.name}</span>
-          </label>
-        )) : <p className="p-2 text-xs text-[var(--hexa-muted)]">No entries</p>}
+    <div className="rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-card)]/50 p-4 space-y-3.5">
+      {/* Header with Title and Overall Status Badge */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-[var(--hexa-border)]">
+        <div>
+          <div className="flex items-center gap-2">
+            <h4 className="font-bold text-xs uppercase tracking-wider text-[var(--hexa-text)]">{title}</h4>
+            {totalSelected === 0 ? (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> Storewide
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-purple-500/15 text-purple-300 border border-purple-500/30">
+                {totalSelected} Target{totalSelected > 1 ? 's' : ''} Selected
+              </span>
+            )}
+          </div>
+          <p className="text-[11px] text-[var(--hexa-muted)] mt-0.5">
+            {totalSelected === 0
+              ? 'Unselected means this discount or campaign applies to ALL products automatically.'
+              : 'Applies exclusively to the selected items and categories below.'}
+          </p>
+        </div>
+
+        {totalSelected > 0 && (
+          <button
+            type="button"
+            onClick={clearAll}
+            className="text-[11px] font-semibold text-rose-400 hover:text-rose-300 underline self-start sm:self-center transition"
+          >
+            Clear all targets
+          </button>
+        )}
       </div>
+
+      {/* Modern Segmented Tab Buttons */}
+      <div className="flex items-center gap-1.5 p-1 rounded-xl bg-[var(--hexa-surface)] border border-[var(--hexa-border)]">
+        <button
+          type="button"
+          onClick={() => { setActiveTab('products'); setSearch(''); }}
+          className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs font-semibold transition ${
+            activeTab === 'products'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'text-[var(--hexa-muted)] hover:text-gray-200 hover:bg-white/[0.04]'
+          }`}
+        >
+          <HugeiconsIcon icon={ShoppingBag01Icon} size={14} />
+          <span>Products</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+            activeTab === 'products'
+              ? 'bg-white/20 text-white'
+              : (productIds?.length || 0) > 0 ? 'bg-purple-500/20 text-purple-300' : 'bg-white/5 text-gray-400'
+          }`}>
+            {(productIds?.length || 0) > 0 ? productIds.length : (products?.length || 0)}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { setActiveTab('categories'); setSearch(''); }}
+          className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs font-semibold transition ${
+            activeTab === 'categories'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'text-[var(--hexa-muted)] hover:text-gray-200 hover:bg-white/[0.04]'
+          }`}
+        >
+          <HugeiconsIcon icon={Ticket01Icon} size={14} />
+          <span>Categories</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+            activeTab === 'categories'
+              ? 'bg-white/20 text-white'
+              : (categoryIds?.length || 0) > 0 ? 'bg-sky-500/20 text-sky-300' : 'bg-white/5 text-gray-400'
+          }`}>
+            {(categoryIds?.length || 0) > 0 ? categoryIds.length : (categories?.length || 0)}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => { setActiveTab('bundles'); setSearch(''); }}
+          className={`flex-1 flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs font-semibold transition ${
+            activeTab === 'bundles'
+              ? 'bg-purple-600 text-white shadow-sm'
+              : 'text-[var(--hexa-muted)] hover:text-gray-200 hover:bg-white/[0.04]'
+          }`}
+        >
+          <HugeiconsIcon icon={GiftIcon} size={14} />
+          <span>Bundles</span>
+          <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+            activeTab === 'bundles'
+              ? 'bg-white/20 text-white'
+              : (bundleIds?.length || 0) > 0 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-white/5 text-gray-400'
+          }`}>
+            {(bundleIds?.length || 0) > 0 ? bundleIds.length : (bundles?.length || 0)}
+          </span>
+        </button>
+      </div>
+
+      {/* Search Input & Quick Selection Toolbar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2">
+        <div className="relative flex-1">
+          <HugeiconsIcon icon={Search01Icon} size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={`Filter ${activeConfig.label.toLowerCase()} by name...`}
+            className="hexa-input !py-1.5 !pl-8 text-xs w-full"
+          />
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded text-gray-400 hover:text-white"
+            >
+              <HugeiconsIcon icon={Cancel01Icon} size={13} />
+            </button>
+          )}
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0 justify-end">
+          <button
+            type="button"
+            onClick={selectAllFiltered}
+            disabled={!filteredItems.length}
+            className="text-[11px] font-semibold text-purple-400 hover:text-purple-300 disabled:opacity-30 disabled:pointer-events-none"
+          >
+            Select All
+          </button>
+          <span className="text-gray-600 text-[10px]">·</span>
+          <button
+            type="button"
+            onClick={deselectAllActive}
+            disabled={!activeConfig.selectedList.length}
+            className="text-[11px] font-semibold text-gray-400 hover:text-gray-300 disabled:opacity-30 disabled:pointer-events-none"
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
+      {/* Grid of Interactive Checkbox Cards with Sleek Scrollbar */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-56 overflow-y-auto p-1.5 rounded-xl border border-[var(--hexa-border)] bg-[var(--hexa-card)] custom-scrollbar">
+        {filteredItems.length > 0 ? (
+          filteredItems.map((item) => {
+            const isSelected = activeConfig.selectedSet.has(item._id)
+            return (
+              <label
+                key={item._id}
+                className={`flex items-start gap-2.5 rounded-xl p-2.5 text-xs cursor-pointer transition border select-none ${
+                  isSelected
+                    ? 'border-purple-500/60 bg-purple-500/15 text-white shadow-sm ring-1 ring-purple-500/30'
+                    : 'border-white/5 bg-white/[0.015] text-gray-300 hover:bg-white/[0.05] hover:border-white/10'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={() => toggleItem(item._id)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-900 text-purple-600 focus:ring-0 focus:ring-offset-0 cursor-pointer"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-xs leading-snug line-clamp-2">{item.name}</p>
+                  {item.price !== undefined && (
+                    <p className="text-[10px] text-gray-400 mt-0.5 font-mono">৳{item.price}</p>
+                  )}
+                  {item.slug && activeTab === 'categories' && (
+                    <p className="text-[10px] text-sky-400/80 mt-0.5 font-mono">/{item.slug}</p>
+                  )}
+                  {item.status && activeTab === 'products' && item.status !== 'active' && (
+                    <span className="text-[9px] uppercase px-1 py-0.2 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 mt-0.5 inline-block">
+                      {item.status}
+                    </span>
+                  )}
+                </div>
+              </label>
+            )
+          })
+        ) : (
+          <div className="col-span-full py-8 text-center text-xs text-[var(--hexa-muted)]">
+            {search ? (
+              <p>No {activeConfig.label.toLowerCase()} found matching &ldquo;{search}&rdquo;</p>
+            ) : (
+              <p>No {activeConfig.label.toLowerCase()} configured in catalog</p>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Selected Items Quick Removal Drawer */}
+      {totalSelected > 0 && (
+        <div className="pt-2.5 border-t border-[var(--hexa-border)] space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] text-[var(--hexa-muted)]">
+            <span className="font-bold uppercase tracking-wider text-[10px]">Active Targets ({totalSelected})</span>
+            <span className="text-[10px]">Click &times; to remove</span>
+          </div>
+          <div className="flex flex-wrap gap-1.5 max-h-24 overflow-y-auto custom-scrollbar p-1">
+            {selectedProducts.map((p) => (
+              <span
+                key={p._id}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] bg-purple-500/15 border border-purple-500/30 text-purple-200"
+              >
+                <span className="font-mono text-[9px] text-purple-400 font-bold uppercase">P</span>
+                <span className="max-w-[140px] truncate">{p.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setProductIds(productIds.filter((id) => id !== p._id))}
+                  className="ml-0.5 hover:text-white text-purple-300 font-bold"
+                  title="Remove"
+                >
+                  &times;
+                </button>
+              </span>
+            ))}
+            {selectedCategories.map((c) => (
+              <span
+                key={c._id}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] bg-sky-500/15 border border-sky-500/30 text-sky-200"
+              >
+                <span className="font-mono text-[9px] text-sky-400 font-bold uppercase">C</span>
+                <span className="max-w-[140px] truncate">{c.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setCategoryIds(categoryIds.filter((id) => id !== c._id))}
+                  className="ml-0.5 hover:text-white text-sky-300 font-bold"
+                  title="Remove"
+                >
+                  &times;
+                </button>
+              </span>
+            ))}
+            {selectedBundles.map((b) => (
+              <span
+                key={b._id}
+                className="inline-flex items-center gap-1 rounded-lg px-2 py-0.5 text-[11px] bg-emerald-500/15 border border-emerald-500/30 text-emerald-200"
+              >
+                <span className="font-mono text-[9px] text-emerald-400 font-bold uppercase">B</span>
+                <span className="max-w-[140px] truncate">{b.name}</span>
+                <button
+                  type="button"
+                  onClick={() => setBundleIds(bundleIds.filter((id) => id !== b._id))}
+                  className="ml-0.5 hover:text-white text-emerald-300 font-bold"
+                  title="Remove"
+                >
+                  &times;
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -1486,8 +3224,16 @@ function Two({ children, wideForm = false }) {
   return <div className={`grid gap-6 ${wideForm ? 'xl:grid-cols-[560px_1fr]' : 'xl:grid-cols-[420px_1fr]'}`}>{children}</div>
 }
 
-function FormCard({ title, children }) {
-  return <section className="hexa-card h-fit p-5"><h2 className="mb-4 font-semibold">{title}</h2>{children}</section>
+function FormCard({ title, children, action }) {
+  return (
+    <section className="hexa-card h-fit p-5">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <h2 className="font-semibold">{title}</h2>
+        {action}
+      </div>
+      {children}
+    </section>
+  )
 }
 
 function ListCard({ title, children, action }) {

@@ -20,6 +20,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import engagementRoutes from './routes/engagementRoutes.js';
 import commerceFeatureRoutes from './routes/commerceFeatureRoutes.js';
 import adminFeatureRoutes from './routes/adminFeatureRoutes.js';
+import publicCacheControl from './middleware/cacheHeaders.js';
 
 const app = express();
 app.set('trust proxy', 1);
@@ -81,12 +82,12 @@ app.get('/api', (_req, res) => res.json({
 }));
 app.get('/api/health', (_req, res) => res.json({ success: true, message: 'HEXA API is healthy', data: { environment: env.NODE_ENV } }));
 app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/categories', categoryRoutes);
-app.use('/api/v1/products', productRoutes);
+app.use('/api/v1/categories', publicCacheControl(120, 600), categoryRoutes);
+app.use('/api/v1/products', publicCacheControl(60, 300), productRoutes);
 app.use('/api/v1/cart', cartRoutes);
 app.use('/api/v1/orders', orderRoutes);
-app.use('/api/v1/payment-methods', paymentMethodRoutes);
-app.use('/api/v1/banners', bannerRoutes);
+app.use('/api/v1/payment-methods', publicCacheControl(300, 1800), paymentMethodRoutes);
+app.use('/api/v1/banners', publicCacheControl(120, 600), bannerRoutes);
 app.use('/api/v1/engagement', engagementRoutes);
 app.use('/api/v1/marketplace', commerceFeatureRoutes);
 app.use('/api/v1/admin/features', adminFeatureRoutes);

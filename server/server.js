@@ -20,6 +20,12 @@ const start = async () => {
 
   process.on('SIGTERM', () => shutdown('SIGTERM'));
   process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('unhandledRejection', (reason) => {
+    console.error('Unhandled Promise Rejection:', reason);
+  });
+  process.on('uncaughtException', (error) => {
+    console.error('Uncaught Exception:', error);
+  });
 };
 
 start().catch((error) => {

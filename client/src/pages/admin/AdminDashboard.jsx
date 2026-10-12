@@ -927,6 +927,9 @@ export default function AdminDashboard() {
                           src={c.avatar.url}
                           alt={c.name}
                           className="h-full w-full object-cover"
+                          crossOrigin="anonymous"
+                          referrerPolicy="no-referrer"
+                          loading="lazy"
                         />
                       ) : (
                         <span>{c.name ? c.name.charAt(0).toUpperCase() : 'U'}</span>

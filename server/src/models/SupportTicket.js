@@ -1,8 +1,9 @@
 import mongoose from 'mongoose';
 const messageSchema = new mongoose.Schema({
-  sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  sender: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   message: { type: String, required: true, maxlength: 4000 },
   isAdmin: { type: Boolean, default: false },
+  isAi: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
 }, { _id: true });
 const schema = new mongoose.Schema({
@@ -14,7 +15,18 @@ const schema = new mongoose.Schema({
   status: { type: String, enum: ['open', 'in_progress', 'waiting_customer', 'resolved', 'closed'], default: 'open', index: true },
   order: { type: mongoose.Schema.Types.ObjectId, ref: 'Order', default: null },
   messages: { type: [messageSchema], default: [] },
+  aiReport: {
+    needsAdminAction: { type: Boolean, default: false },
+    issueSummary: { type: String, default: '' },
+    recommendedAction: { type: String, default: '' },
+    escalationReason: { type: String, default: '' },
+    sentiment: { type: String, default: 'neutral' },
+    urgency: { type: String, default: 'normal' },
+    generatedAt: { type: Date, default: null },
+  },
+  aiHandled: { type: Boolean, default: false },
   lastReplyAt: { type: Date, default: Date.now, index: true },
 }, { timestamps: true });
 schema.index({ user: 1, updatedAt: -1 });
+schema.index({ 'aiReport.needsAdminAction': 1, status: 1 });
 export default mongoose.model('SupportTicket', schema);

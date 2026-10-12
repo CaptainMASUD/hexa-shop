@@ -33,6 +33,9 @@ export default function ImageUploader({ folder = 'products', value, onChange, la
             src={value.url}
             alt=""
             className="h-16 w-20 rounded-lg border border-white/10 object-cover"
+            crossOrigin="anonymous"
+            referrerPolicy="no-referrer"
+            loading="lazy"
           />
         )}
         <label className="hexa-btn-secondary cursor-pointer !px-4 !py-2 text-sm inline-flex items-center gap-1.5">

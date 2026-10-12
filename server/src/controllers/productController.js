@@ -13,6 +13,9 @@ import { destroyImage } from '../services/cloudinaryService.js';
 import { writeAudit } from '../services/auditService.js';
 import { subscribeRestockAlert, checkAndTriggerRestockAlerts } from '../services/restockService.js';
 import { paginateWithCursor } from '../utils/cursorPagination.js';
+import serverCache from '../utils/cache.js';
+
+export const PRODUCT_CARD_FIELDS = 'name slug brand thumbnail bannerImage regularPrice salePrice currency productType featured popular newArrival sortOrder ratingAverage reviewCount shortDescription stock allowUnlimitedStock lowStockThreshold variants._id variants.name variants.regularPrice variants.salePrice variants.stock variants.active variants.unlimitedStock variants.duration variants.region variants.platform customFields.name customFields.required customFields.type category soldQuantity createdAt';
 
 const buildProductQuery = async (query, adminMode = false) => {
   const filter = adminMode ? {} : { status: 'active' };
@@ -128,6 +131,7 @@ const list = (adminMode = false) => asyncHandler(async (req, res) => {
       { $addFields: { _effectivePrice: effectivePriceExpression } },
       ...(Object.keys(priceMatch).length ? [{ $match: { _effectivePrice: priceMatch } }] : []),
       { $sort: sort === 'price_asc' ? { _effectivePrice: 1, createdAt: -1 } : sort === 'price_desc' ? { _effectivePrice: -1, createdAt: -1 } : (sortMap[sort] || sortMap.newest) },
+      ...(!adminMode ? [{ $project: { description: 0, faqs: 0, guide: 0, details: 0, fulfillmentConfig: 0, seo: 0, searchKeywords: 0 } }] : []),
       { $facet: { data: [{ $skip: (currentPage - 1) * limit }, { $limit: limit }], meta: [{ $count: 'total' }] } },
     ];
     const [result] = await Product.aggregate(pipeline);
@@ -138,14 +142,26 @@ const list = (adminMode = false) => asyncHandler(async (req, res) => {
     return success(res, { data, meta: { page: currentPage, limit, total, pages: Math.ceil(total / limit) } });
   }
 
+  if (!adminMode && !cursor && !page) {
+    const data = await Product.find(filter)
+      .select(PRODUCT_CARD_FIELDS)
+      .populate('category', 'name slug image')
+      .sort(sortMap[sort] || sortMap.newest)
+      .limit(limit)
+      .lean({ virtuals: true });
+    data.forEach(addStockStatus);
+    return success(res, { data, meta: { limit, count: data.length } });
+  }
+
   if (cursor || adminMode || !page) {
     const result = await paginateWithCursor(Product, filter, {
       limit,
       cursor,
       direction,
+      select: adminMode ? undefined : PRODUCT_CARD_FIELDS,
       populate: { path: 'category', select: 'name slug image' },
       virtuals: true,
-      includeTotal: true,
+      includeTotal: adminMode || Boolean(req.query.includeTotal),
     });
     result.data.forEach(addStockStatus);
     return success(res, result);
@@ -154,6 +170,7 @@ const list = (adminMode = false) => asyncHandler(async (req, res) => {
   const currentPage = Math.max(1, Number(page || 1));
   const [data, total] = await Promise.all([
     Product.find(filter)
+      .select(adminMode ? undefined : PRODUCT_CARD_FIELDS)
       .populate('category', 'name slug image')
       .sort(sortMap[sort] || sortMap.newest)
       .skip((currentPage - 1) * limit)
@@ -185,6 +202,14 @@ export const getProduct = asyncHandler(async (req, res) => {
     : { slug: req.params.slugOrId, status: 'active' };
   const product = await Product.findOne(filter).populate('category', 'name slug image').lean({ virtuals: true });
   if (!product) throw new ApiError(404, 'Product not found');
+  delete product.purchasePrice;
+  delete product.costPrice;
+  if (product.variants?.length) {
+    product.variants.forEach((v) => {
+      delete v.purchasePrice;
+      delete v.costPrice;
+    });
+  }
   return success(res, { data: product });
 });
 
@@ -199,11 +224,12 @@ export const createProduct = asyncHandler(async (req, res) => {
   if (!category) throw new ApiError(400, 'Category is unavailable');
   const product = await Product.create({ ...req.body, slug: toSlug(req.body.slug || req.body.name) });
   const initialMovements = [];
-  if (product.stock > 0) initialMovements.push({ product: product._id, previousStock: 0, quantityChanged: product.stock, newStock: product.stock, reason: 'Initial product stock', changedBy: req.user._id });
+  if (product.stock > 0) initialMovements.push({ product: product._id, previousStock: 0, quantityChanged: product.stock, newStock: product.stock, purchasePrice: product.purchasePrice || 0, reason: 'Initial product stock', changedBy: req.user._id });
   for (const variant of product.variants) {
-    if (variant.stock > 0) initialMovements.push({ product: product._id, variantId: variant._id, previousStock: 0, quantityChanged: variant.stock, newStock: variant.stock, reason: 'Initial plan stock', changedBy: req.user._id });
+    if (variant.stock > 0) initialMovements.push({ product: product._id, variantId: variant._id, previousStock: 0, quantityChanged: variant.stock, newStock: variant.stock, purchasePrice: variant.purchasePrice || variant.costPrice || 0, reason: 'Initial plan stock', changedBy: req.user._id });
   }
   if (initialMovements.length) await StockMovement.insertMany(initialMovements);
+  serverCache.invalidateTags(['products', 'home']);
   await writeAudit(req, 'product_created', 'Product', product._id, { name: product.name });
   return success(res, { status: 201, message: 'Product created successfully', data: product });
 });
@@ -217,11 +243,11 @@ export const updateProduct = asyncHandler(async (req, res) => {
   Object.assign(product, { ...req.body, slug: toSlug(req.body.slug || req.body.name) });
   await product.save();
   const movements = [];
-  if (product.stock !== previousBaseStock) movements.push({ product: product._id, previousStock: previousBaseStock, quantityChanged: product.stock - previousBaseStock, newStock: product.stock, reason: 'Product stock changed from product editor', changedBy: req.user._id });
+  if (product.stock !== previousBaseStock) movements.push({ product: product._id, previousStock: previousBaseStock, quantityChanged: product.stock - previousBaseStock, newStock: product.stock, purchasePrice: product.purchasePrice || 0, reason: 'Product stock changed from product editor', changedBy: req.user._id });
   for (const variant of product.variants) {
     const previous = previousVariantStocks.get(String(variant._id)) ?? 0;
     if (variant.stock !== previous) {
-      movements.push({ product: product._id, variantId: variant._id, previousStock: previous, quantityChanged: variant.stock - previous, newStock: variant.stock, reason: previousVariantStocks.has(String(variant._id)) ? 'Plan stock changed from product editor' : 'Plan created with initial stock', changedBy: req.user._id });
+      movements.push({ product: product._id, variantId: variant._id, previousStock: previous, quantityChanged: variant.stock - previous, newStock: variant.stock, purchasePrice: variant.purchasePrice || variant.costPrice || 0, reason: previousVariantStocks.has(String(variant._id)) ? 'Plan stock changed from product editor' : 'Plan created with initial stock', changedBy: req.user._id });
       if (variant.stock > previous) {
         checkAndTriggerRestockAlerts(product._id, variant._id).catch(() => {});
       }
@@ -233,6 +259,7 @@ export const updateProduct = asyncHandler(async (req, res) => {
   if (movements.length) await StockMovement.insertMany(movements);
   const nextImages = new Set([product.thumbnail?.publicId, ...(product.galleryImages || []).map((i) => i.publicId), product.bannerImage?.publicId].filter(Boolean));
   await Promise.all(oldImages.filter((id) => !nextImages.has(id)).map(destroyImage));
+  serverCache.invalidateTags(['products', 'home']);
   await writeAudit(req, 'product_updated', 'Product', product._id, { name: product.name, stockMovements: movements.length });
   return success(res, { message: 'Product updated successfully', data: product });
 });
@@ -269,12 +296,14 @@ export const deleteProduct = asyncHandler(async (req, res) => {
     ]);
 
     await Product.deleteOne({ _id: product._id });
+    serverCache.invalidateTags(['products', 'home']);
     await writeAudit(req, 'product_deleted', 'Product', product._id, { name: product.name, permanent: true });
     return success(res, { message: 'Product permanently deleted successfully' });
   }
 
   product.status = 'archived';
   await product.save();
+  serverCache.invalidateTags(['products', 'home']);
   await writeAudit(req, 'product_archived', 'Product', product._id, { name: product.name });
   return success(res, { message: 'Product archived successfully' });
 });
