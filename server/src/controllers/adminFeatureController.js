@@ -429,8 +429,10 @@ export const listFraudBlocks = asyncHandler(async (req, res) => {
 });
 
 export const createFraudBlock = asyncHandler(async (req, res) => {
-  const { type, value, reason, expiresAt } = req.body;
-  const cleanValue = String(value).toLowerCase().trim().replace(/[\s-]/g, '');
+  let cleanValue = String(value).toLowerCase().trim().replace(/[\s-]/g, '');
+  if (type === 'ip' && cleanValue.startsWith('::ffff:')) {
+    cleanValue = cleanValue.replace(/^::ffff:/, '');
+  }
 
   const block = await FraudBlock.findOneAndUpdate(
     { type, value: cleanValue },

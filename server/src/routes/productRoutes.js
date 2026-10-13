@@ -3,9 +3,10 @@ import { listProducts, getProduct, suggestions, createRestockAlert } from '../co
 import { validateQuery, validateBody } from '../middleware/validate.js';
 import { productQuerySchema, restockAlertSchema } from '../validations/schemas.js';
 import { restockAlertLimiter } from '../middleware/rateLimiters.js';
+import { checkFraudBlock } from '../middleware/fraudDetection.js';
 const router = Router();
 router.get('/suggestions', suggestions);
 router.get('/', validateQuery(productQuerySchema), listProducts);
 router.get('/:slugOrId', getProduct);
-router.post('/:id/restock-alert', restockAlertLimiter, validateBody(restockAlertSchema), createRestockAlert);
+router.post('/:id/restock-alert', restockAlertLimiter, checkFraudBlock, validateBody(restockAlertSchema), createRestockAlert);
 export default router;

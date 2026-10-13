@@ -660,6 +660,7 @@ function Promotions() {
       if (editingId) await adminPut(`/features/promotions/${editingId}`, payload)
       else await adminPost('/features/promotions', payload)
       notify(editingId ? 'Campaign updated' : 'Campaign created')
+      setModalOpen(false)
       reset()
       await load()
     } catch (error) {
